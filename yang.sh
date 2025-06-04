@@ -6,4 +6,4 @@ timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 # 执行Git操作
 git add .
 git commit -m "杨建飞 $timestamp 更新"
-git push origin YangJianfei_Branch
+git push origin main
