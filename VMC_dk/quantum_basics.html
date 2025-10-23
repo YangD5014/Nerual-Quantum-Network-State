@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量子力学基础 - 变分神经网络量子态学习计划</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .hero {
+            background: linear-gradient(135deg, #1a2a6c, #2c3e50);
+            color: white;
+            padding: 60px 0;
+            text-align: center;
+            border-radius: 0 0 30px 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .hero h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .content-container {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .section-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1a2a6c;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .subsection-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 25px 0 15px;
+            color: #3498db;
+        }
+        .formula {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow-x: auto;
+        }
+        .key-point {
+            background-color: #e9f7fe;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .navigation {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        .btn-primary {
+            background-color: #1a2a6c;
+            border-color: #1a2a6c;
+            border-radius: 30px;
+            padding: 8px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #2c3e50;
+            border-color: #2c3e50;
+            transform: translateY(-2px);
+        }
+        .footer {
+            background-color: #1a2a6c;
+            color: white;
+            padding: 30px 0;
+            margin-top: 60px;
+            text-align: center;
+        }
+        .footer p {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        .footer a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .example-box {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .example-title {
+            font-weight: 600;
+            color: #1a2a6c;
+            margin-bottom: 10px;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .toc-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #1a2a6c;
+        }
+        .toc ul {
+            padding-left: 20px;
+            margin-bottom: 0;
+        }
+        .toc li {
+            margin-bottom: 5px;
+        }
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="container">
+            <h1>量子力学基础</h1>
+            <p class="lead">学习量子力学的基本概念、波函数和薛定谔方程</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="navigation">
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="index.html" class="btn btn-outline-primary">
+                    <i class="bi bi-arrow-left me-2"></i>返回主页
+                </a>
+                <div>
+                    <a href="statistical_mechanics.html" class="btn btn-primary me-2">
+                        统计力学基础<i class="bi bi-arrow-right ms-2"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-container">
+            <div class="section-card">
+                <h2 class="section-title">目录</h2>
+                <div class="toc">
+                    <div class="toc-title">本节内容</div>
+                    <ul>
+                        <li><a href="#introduction">1. 量子力学简介</a></li>
+                        <li><a href="#wavefunction">2. 波函数与概率解释</a></li>
+                        <li><a href="#schrodinger">3. 薛定谔方程</a></li>
+                        <li><a href="#operators">4. 算符与期望值</a></li>
+                        <li><a href="#superposition">5. 量子态的叠加与测量</a></li>
+                        <li><a href="#examples">6. 一维量子系统示例</a></li>
+                        <li><a href="#summary">7. 总结</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="introduction">1. 量子力学简介</h2>
+                <p>量子力学是描述微观粒子行为的物理理论，它与我们日常经验中的经典力学有着本质的区别。在量子力学中，粒子的行为由波函数描述，具有波粒二象性，并且测量过程会影响系统的状态。</p>
+                
+                <div class="key-point">
+                    <h5>量子力学的核心概念</h5>
+                    <ul>
+                        <li><strong>波粒二象性</strong>：微观粒子既表现出波的性质，又表现出粒子的性质</li>
+                        <li><strong>测不准原理</strong>：无法同时精确测量粒子的位置和动量</li>
+                        <li><strong>量子叠加</strong>：量子系统可以同时处于多个状态的叠加</li>
+                        <li><strong>测量坍缩</strong>：测量会导致量子态坍缩到某个确定状态</li>
+                    </ul>
+                </div>
+                
+                <p>量子力学的发展始于20世纪初，主要贡献者包括普朗克、爱因斯坦、玻尔、海森堡、薛定谔、狄拉克等。它成功地解释了经典力学无法解释的现象，如黑体辐射、光电效应、原子光谱等。</p>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="wavefunction">2. 波函数与概率解释</h2>
+                <p>在量子力学中，系统的状态由波函数 $\Psi(x,t)$ 描述。波函数是一个复数函数，其物理意义由玻恩的概率解释给出：</p>
+                
+                <div class="formula">
+                    $|\Psi(x,t)|^2$ 表示在时间 $t$ 在位置 $x$ 处找到粒子的概率密度
+                </div>
+                
+                <p>波函数需要满足归一化条件：</p>
+                
+                <div class="formula">
+                    $\int_{-\infty}^{\infty} |\Psi(x,t)|^2 dx = 1$
+                </div>
+                
+                <p>这表示在整个空间中找到粒子的概率为1。波函数的相位（虽然不直接可观测）在量子干涉等现象中起着重要作用。</p>
+                
+                <div class="key-point">
+                    <h5>波函数的性质</h5>
+                    <ul>
+                        <li>波函数是复数函数，可以表示为 $\Psi(x,t) = |\Psi(x,t)|e^{i\phi(x,t)}$</li>
+                        <li>波函数必须是单值、连续和有限的（除了在某些特殊点）</li>
+                        <li>波函数的平方模 $|\Psi(x,t)|^2$ 给出概率密度</li>
+                        <li>波函数的相位差会导致量子干涉现象</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="schrodinger">3. 薛定谔方程</h2>
+                <p>薛定谔方程是量子力学的基本方程，描述了波函数随时间的演化。对于一维系统，时间依赖的薛定谔方程为：</p>
+                
+                <div class="formula">
+                    $i\hbar\frac{\partial}{\partial t}\Psi(x,t) = \hat{H}\Psi(x,t)$
+                </div>
+                
+                <p>其中，$\hat{H}$ 是系统的哈密顿算符，通常形式为：</p>
+                
+                <div class="formula">
+                    $\hat{H} = -\frac{\hbar^2}{2m}\frac{\partial^2}{\partial x^2} + V(x)$
+                </div>
+                
+                <p>这里，$m$ 是粒子质量，$V(x)$ 是势能函数，第一项代表动能，第二项代表势能。</p>
+                
+                <h3 class="subsection-title">定态薛定谔方程</h3>
+                <p>当势能不显含时间时，可以使用分离变量法求解薛定谔方程。设波函数可以表示为：</p>
+                
+                <div class="formula">
+                    $\Psi(x,t) = \psi(x)e^{-iEt/\hbar}$
+                </div>
+                
+                <p>代入时间依赖的薛定谔方程，得到定态薛定谔方程：</p>
+                
+                <div class="formula">
+                    $-\frac{\hbar^2}{2m}\frac{d^2\psi(x)}{dx^2} + V(x)\psi(x) = E\psi(x)$
+                </div>
+                
+                <p>其中，$E$ 是系统的能量本征值，$\psi(x)$ 是对应的能量本征态。</p>
+                
+                <div class="example-box">
+                    <div class="example-title">示例：一维无限深势阱</div>
+                    <p>考虑一个粒子在一维无限深势阱中运动，势能函数为：</p>
+                    <div class="formula">
+                        $V(x) = \begin{cases} 
+                        0 & \text{if } 0 \leq x \leq L \\
+                        \infty & \text{otherwise}
+                        \end{cases}$
+                    </div>
+                    <p>定态薛定谔方程的解为：</p>
+                    <div class="formula">
+                        $\psi_n(x) = \sqrt{\frac{2}{L}}\sin\left(\frac{n\pi x}{L}\right), \quad E_n = \frac{n^2\pi^2\hbar^2}{2mL^2}, \quad n=1,2,3,\dots$
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="operators">4. 算符与期望值</h2>
+                <p>在量子力学中，物理量由算符表示。算符是作用在波函数上的数学对象，对应于可观测的物理量。常见的算符包括：</p>
+                
+                <ul>
+                    <li><strong>位置算符</strong>：$\hat{x} = x$（乘以x）</li>
+                    <li><strong>动量算符</strong>：$\hat{p} = -i\hbar\frac{\partial}{\partial x}$</li>
+                    <li><strong>动能算符</strong>：$\hat{T} = -\frac{\hbar^2}{2m}\frac{\partial^2}{\partial x^2}$</li>
+                    <li><strong>哈密顿算符</strong>：$\hat{H} = \hat{T} + V(x)$</li>
+                </ul>
+                
+                <p>算符的本征方程为：</p>
+                
+                <div class="formula">
+                    $\hat{A}\psi = a\psi$
+                </div>
+                
+                <p>其中，$a$ 是算符 $\hat{A}$ 的本征值，$\psi$ 是对应的本征态。</p>
+                
+                <h3 class="subsection-title">期望值</h3>
+                <p>物理量 $A$ 在状态 $\Psi$ 中的期望值（平均值）为：</p>
+                
+                <div class="formula">
+                    $\langle A \rangle = \int_{-\infty}^{\infty} \Psi^*(x,t)\hat{A}\Psi(x,t)dx$
+                </div>
+                
+                <p>对于归一化的波函数，期望值表示对该物理量进行多次测量的平均值。</p>
+                
+                <div class="key-point">
+                    <h5>算符的性质</h5>
+                    <ul>
+                        <li><strong>线性算符</strong>：$\hat{A}(c_1\psi_1 + c_2\psi_2) = c_1\hat{A}\psi_1 + c_2\hat{A}\psi_2$</li>
+                        <li><strong>厄米算符</strong>：$\int \psi_1^*\hat{A}\psi_2 dx = \int (\hat{A}\psi_1)^*\psi_2 dx$，对应于可观测的物理量</li>
+                        <li><strong>对易关系</strong>：$[\hat{A},\hat{B}] = \hat{A}\hat{B} - \hat{B}\hat{A}$，描述算符之间的相互关系</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="superposition">5. 量子态的叠加与测量</h2>
+                <p>量子力学的一个基本原理是叠加原理，即如果 $\psi_1$ 和 $\psi_2$ 是系统的可能状态，那么它们的线性组合也是系统的可能状态：</p>
+                
+                <div class="formula">
+                    $\Psi = c_1\psi_1 + c_2\psi_2$
+                </div>
+                
+                <p>其中，$c_1$ 和 $c_2$ 是复数系数。更一般地，量子态可以表示为多个本征态的叠加：</p>
+                
+                <div class="formula">
+                    $\Psi = \sum_n c_n\psi_n$
+                </div>
+                
+                <p>其中，$\psi_n$ 是某个算符（如哈密顿算符）的本征态，$c_n$ 是对应的系数。</p>
+                
+                <h3 class="subsection-title">测量与坍缩</h3>
+                <p>当对量子系统进行测量时，会发生以下过程：</p>
+                
+                <ol>
+                    <li>波函数坍缩到某个本征态 $\psi_n$</li>
+                    <li>测量结果为对应的本征值 $a_n$</li>
+                    <li>测量得到 $a_n$ 的概率为 $|c_n|^2$</li>
+                </ol>
+                
+                <p>测量后，系统处于新的状态 $\psi_n$，除非系统处于本征态，否则测量会改变系统的状态。</p>
+                
+                <div class="example-box">
+                    <div class="example-title">示例：量子叠加态</div>
+                    <p>考虑一个简单的量子系统，有两个可能的状态 $|0\rangle$ 和 $|1\rangle$。系统的叠加态可以表示为：</p>
+                    <div class="formula">
+                        $|\Psi\rangle = \frac{1}{\sqrt{2}}|0\rangle + \frac{1}{\sqrt{2}}|1\rangle$
+                    </div>
+                    <p>测量时，有50%的概率得到 $|0\rangle$，50%的概率得到 $|1\rangle$。测量后，系统坍缩到相应的状态。</p>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="examples">6. 一维量子系统示例</h2>
+                
+                <h3 class="subsection-title">一维谐振子</h3>
+                <p>一维谐振子是量子力学中最重要的模型之一，其势能函数为：</p>
+                
+                <div class="formula">
+                    $V(x) = \frac{1}{2}m\omega^2x^2$
+                </div>
+                
+                <p>其中，$m$ 是粒子质量，$\omega$ 是振荡频率。定态薛定谔方程的解为：</p>
+                
+                <div class="formula">
+                    $\psi_n(x) = \left(\frac{m\omega}{\pi\hbar}\right)^{1/4}\frac{1}{\sqrt{2^nn!}}H_n\left(\sqrt{\frac{m\omega}{\hbar}}x\right)e^{-\frac{m\omega}{2\hbar}x^2}$
+                </div>
+                
+                <div class="formula">
+                    $E_n = \hbar\omega\left(n + \frac{1}{2}\right), \quad n=0,1,2,\dots$
+                </div>
+                
+                <p>其中，$H_n(x)$ 是厄米多项式。基态（$n=0$）波函数为高斯函数：</p>
+                
+                <div class="formula">
+                    $\psi_0(x) = \left(\frac{m\omega}{\pi\hbar}\right)^{1/4}e^{-\frac{m\omega}{2\hbar}x^2}$
+                </div>
+                
+                <h3 class="subsection-title">自由粒子</h3>
+                <p>自由粒子的势能为零，$V(x) = 0$。定态薛定谔方程为：</p>
+                
+                <div class="formula">
+                    $-\frac{\hbar^2}{2m}\frac{d^2\psi(x)}{dx^2} = E\psi(x)$
+                </div>
+                
+                <p>解为平面波：</p>
+                
+                <div class="formula">
+                    $\psi_k(x) = \frac{1}{\sqrt{2\pi}}e^{ikx}, \quad E_k = \frac{\hbar^2k^2}{2m}$
+                </div>
+                
+                <p>其中，$k$ 是波数，与动量的关系为 $p = \hbar k$。自由粒子的波函数不是平方可积的，需要用波包来表示物理状态。</p>
+                
+                <h3 class="subsection-title">势垒隧穿</h3>
+                <p>考虑一个粒子遇到高度为 $V_0$、宽度为 $a$ 的势垒：</p>
+                
+                <div class="formula">
+                    $V(x) = \begin{cases} 
+                    0 & \text{if } x < 0 \text{ or } x > a \\
+                    V_0 & \text{if } 0 \leq x \leq a
+                    \end{cases}$
+                </div>
+                
+                <p>当粒子能量 $E < V_0$ 时，经典力学中粒子无法越过势垒，但在量子力学中，粒子有一定概率"隧穿"通过势垒。隧穿概率为：</p>
+                
+                <div class="formula">
+                    $T \approx e^{-2\kappa a}, \quad \kappa = \sqrt{\frac{2m(V_0-E)}{\hbar^2}}$
+                </div>
+                
+                <p>量子隧穿效应在许多物理现象和技术应用中起着重要作用，如放射性衰变、扫描隧道显微镜等。</p>
+            </div>
+
+            <div class="section-card">
+                <h2 class="section-title" id="summary">7. 总结</h2>
+                <p>量子力学是描述微观世界的基本理论，与我们熟悉的经典力学有着本质的区别。本节介绍了量子力学的基本概念，包括：</p>
+                
+                <ul>
+                    <li>波函数与概率解释：波函数描述量子系统的状态，其平方模给出概率密度</li>
+                    <li>薛定谔方程：描述波函数随时间的演化，是量子力学的基本方程</li>
+                    <li>算符与期望值：物理量由算符表示，期望值给出测量的平均值</li>
+                    <li>量子叠加与测量：量子态可以叠加，测量会导致波函数坍缩</li>
+                    <li>一维量子系统：介绍了一维谐振子、自由粒子和势垒隧穿等典型例子</li>
+                </ul>
+                
+                <div class="key-point">
+                    <h5>量子力学的核心思想</h5>
+                    <p>量子力学的核心思想是微观粒子的行为由波函数描述，具有概率性和不确定性。测量过程会改变系统的状态，这是与经典力学的根本区别。量子力学成功地解释了微观世界的现象，并在现代科技中有着广泛的应用，如半导体、激光、核能、量子计算等。</p>
+                </div>
+                
+                <p>在下一节中，我们将学习统计力学基础，了解如何从微观粒子的行为推导出宏观系统的热力学性质。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <div class="container">
+            <p>© 2023 变分神经网络量子态学习计划 | <a href="index.html">返回主页</a> | <a href="statistical_mechanics.html">下一节：统计力学基础</a></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false}
+                ]
+            });
+        });
+    </script>
+</body>
+</html>

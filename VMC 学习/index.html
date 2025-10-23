@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>变分神经网络量子态学习计划</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background-color: #343a40;
+            color: white;
+            border-radius: 10px;
+        }
+        .phase-card {
+            margin-bottom: 30px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .phase-card:hover {
+            transform: translateY(-5px);
+        }
+        .phase-header {
+            padding: 15px;
+            color: white;
+            font-weight: bold;
+        }
+        .phase-1 .phase-header { background-color: #0d6efd; }
+        .phase-2 .phase-header { background-color: #6610f2; }
+        .phase-3 .phase-header { background-color: #dc3545; }
+        .phase-4 .phase-header { background-color: #198754; }
+        .phase-5 .phase-header { background-color: #fd7e14; }
+        .topic-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .topic-item:last-child {
+            border-bottom: none;
+        }
+        .topic-title {
+            font-weight: bold;
+            color: #343a40;
+            margin-bottom: 10px;
+        }
+        .resource-links {
+            margin-top: 10px;
+        }
+        .resource-link {
+            margin-right: 10px;
+            font-size: 14px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #343a40;
+            color: white;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>变分神经网络量子态学习计划</h1>
+            <p class="lead">系统学习变分蒙特卡洛方法与神经网络量子态</p>
+        </div>
+        
+        <div class="section">
+            <h2>学习资源</h2>
+            <p>查看完整的<a href="README.md">学习计划指南</a>，包含详细的学习路径、实践项目和推荐参考文献。</p>
+            <p>每个主题都包含理论材料（Markdown格式）和代码示例（Python格式），建议先阅读理论材料，再运行代码示例。</p>
+        </div>
+
+        <div class="phase-card phase-1">
+            <div class="phase-header">
+                <h2>阶段一：基础量子力学与统计力学</h2>
+            </div>
+            <div class="card-body">
+                <div class="topic-item">
+                    <div class="topic-title">1. 量子力学基础</div>
+                    <p>波函数、薛定谔方程、量子态与测量</p>
+                    <div class="resource-links">
+                        <a href="quantum_basics.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/quantum_basics.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">2. 统计力学基础</div>
+                    <p>系综理论、配分函数、统计分布</p>
+                    <div class="resource-links">
+                        <a href="statistical_mechanics.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/statistical_mechanics.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">3. 多体量子系统</div>
+                    <p>二次量子化、费米子与玻色子、哈密顿量构建</p>
+                    <div class="resource-links">
+                        <a href="many_body_systems.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/many_body_systems.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="phase-card phase-2">
+            <div class="phase-header">
+                <h2>阶段二：蒙特卡洛方法</h2>
+            </div>
+            <div class="card-body">
+                <div class="topic-item">
+                    <div class="topic-title">1. 蒙特卡洛基础</div>
+                    <p>随机数生成、大数定律、中心极限定理</p>
+                    <div class="resource-links">
+                        <a href="mc_basics.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/mc_basics.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">2. 采样算法</div>
+                    <p>马尔可夫链、Metropolis-Hastings算法、Gibbs采样</p>
+                    <div class="resource-links">
+                        <a href="sampling_algorithms.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/sampling_algorithms.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">3. 重要性采样</div>
+                    <p>重要性采样原理、方差减少技术</p>
+                    <div class="resource-links">
+                        <a href="importance_sampling.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/importance_sampling.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="phase-card phase-3">
+            <div class="phase-header">
+                <h2>阶段三：变分蒙特卡洛方法</h2>
+            </div>
+            <div class="card-body">
+                <div class="topic-item">
+                    <div class="topic-title">1. 变分原理</div>
+                    <p>变分原理、Rayleigh-Ritz方法、变分参数优化</p>
+                    <div class="resource-links">
+                        <a href="variational_principle.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/variational_principle.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">2. VMC算法</div>
+                    <p>VMC基本流程、局部能量、波函数优化</p>
+                    <div class="resource-links">
+                        <a href="vmc_algorithm.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/vmc_algorithm.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">3. Jastrow因子</div>
+                    <p>Jastrow因子形式、电子关联、参数优化</p>
+                    <div class="resource-links">
+                        <a href="jastrow_factor.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/jastrow_factor.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="phase-card phase-4">
+            <div class="phase-header">
+                <h2>阶段四：神经网络基础</h2>
+            </div>
+            <div class="card-body">
+                <div class="topic-item">
+                    <div class="topic-title">1. 神经网络基础</div>
+                    <p>感知机、多层感知机、激活函数、反向传播</p>
+                    <div class="resource-links">
+                        <a href="nn_basics.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/nn_basics.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">2. 深度学习框架</div>
+                    <p>PyTorch/TensorFlow基础、自动微分、模型训练</p>
+                    <div class="resource-links">
+                        <a href="deep_learning_frameworks.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/deep_learning_frameworks.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">3. 神经网络优化</div>
+                    <p>优化算法、正则化、超参数调优</p>
+                    <div class="resource-links">
+                        <a href="nn_optimization.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/nn_optimization.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="phase-card phase-5">
+            <div class="phase-header">
+                <h2>阶段五：神经网络量子态</h2>
+            </div>
+            <div class="card-body">
+                <div class="topic-item">
+                    <div class="topic-title">1. RBM量子态</div>
+                    <p>受限玻尔兹曼机、RBM波函数、参数化</p>
+                    <div class="resource-links">
+                        <a href="rbm_quantum_state.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/rbm_quantum_state.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">2. 前馈神经网络量子态</div>
+                    <p>前馈神经网络波函数、对称性、物理约束</p>
+                    <div class="resource-links">
+                        <a href="feedforward_nn_quantum_state.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/feedforward_nn_quantum_state.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+                <div class="topic-item">
+                    <div class="topic-title">3. 实际应用与案例</div>
+                    <p>分子系统、晶格模型、实际计算案例</p>
+                    <div class="resource-links">
+                        <a href="practical_applications.md" class="btn btn-sm btn-outline-primary resource-link">Markdown</a>
+                        <a href="code/practical_applications.py" class="btn btn-sm btn-outline-success resource-link">Python代码</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2023 变分神经网络量子态学习计划 | 持续更新中</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
