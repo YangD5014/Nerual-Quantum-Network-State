@@ -13,6 +13,7 @@ def quantum_neural_network(x, n_qubits, params, n_layers):
     # 数据编码 - 使用JAX友好的操作
     for i in range(n_qubits):
         qml.RX(jnp.pi * x[i], wires=i)
+    qml.Barrier(wires=wires)
     
     # 变分层
     for layer in range(n_layers):
@@ -24,6 +25,7 @@ def quantum_neural_network(x, n_qubits, params, n_layers):
         # 纠缠门
         for i in range(n_qubits - 1):
             qml.CNOT(wires=[i, i+1])
+        qml.Barrier(wires=wires)
     
     # 测量所有量子比特的PauliZ期望值
     return [qml.expval(qml.PauliZ(i)) for i in wires]
