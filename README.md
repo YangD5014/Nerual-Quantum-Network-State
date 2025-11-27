@@ -9,5 +9,10 @@
 5. [H4分子求基态能量案例-RBM](./开源框架学习%20Netket/H2H4/H4_VQMC%20案例_RBM.ipynb)
 6. [H4分子求基态能量案例-FFNN](./开源框架学习%20Netket/H2H4/H4_VQMC%20案例_FFNN.ipynb)
 
+
+## QNN 作为 ansatz 的一系列尝试:
+1. [QNN的定义](./pennylane/QNN/QNN_ansatz完整定义.ipynb)  
+
+
 ## JAX NNX相关教程总结：
 1. [认识 Pytree](./FLAX%20学习/认识pytree.md)
