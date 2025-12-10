@@ -13,6 +13,7 @@
 
 ## QNN 作为 ansatz 的一系列尝试:
 1. [QNN的定义](./pennylane/QNN/QNN_ansatz完整定义.ipynb)  
+2. [QNN作为ansatz的尝试](./pennylane/QNN/QNN_ansatz%E5%AE%8C%E6%95%B4%E5%AE%9A%E4%B9%89-2.ipynb)
 
 
 ## JAX NNX相关教程总结：
