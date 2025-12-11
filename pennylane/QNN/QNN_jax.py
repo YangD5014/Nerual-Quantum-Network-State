@@ -23,6 +23,7 @@ def data_encoding(x, n_qubits):
         n_qubits (int): 量子比特的数量。
     """
     if len(x) != n_qubits:
+        print(f"输入数据的长度为 {x.shape}，但预期长度为 {n_qubits}")
         raise ValueError("输入数据的长度必须等于量子比特数量")
 
     # 遍历每一个量子比特
