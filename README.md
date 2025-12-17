@@ -19,3 +19,6 @@
 
 ## JAX NNX相关教程总结：
 1. [认识 Pytree](./FLAX%20学习/认识pytree.md)
+
+## 从头拆解 MCMC 算法
+1. [MCMC算法案例](./蒙特卡洛算法学习/Metropolis_Hastings_Algorithm.ipynb)
