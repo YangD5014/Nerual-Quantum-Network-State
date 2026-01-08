@@ -10,6 +10,7 @@
 6. [H4分子求基态能量案例-FFNN](./开源框架学习%20Netket/H2H4/H4_VQMC%20案例_FFNN.ipynb)  
 
 7. [H2分子-FFNN 分析](./开源框架学习%20Netket/H2H4/H2_FFNN波函数Ansatz分析.md)
+8. [H2分子-FFNN相位+振幅](./开源框架学习%20Netket/H2H4/H2_VQMC%20案例_FFNN_幅度相位.ipynb)
 
 
 ## QNN 作为 ansatz 的一系列尝试:
