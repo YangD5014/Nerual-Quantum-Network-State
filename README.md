@@ -17,7 +17,7 @@
 1. [QNN的定义](./pennylane/QNN/QNN_ansatz完整定义.ipynb)  
 2. [QNN作为ansatz的尝试](./pennylane/QNN/QNN_ansatz%E5%AE%8C%E6%95%B4%E5%AE%9A%E4%B9%89-2.ipynb)
 3. [QNN作为ansatz的成功尝试-H2](./pennylane/QNN/QNN_ansatz完整定义-H2正式版.ipynb)
-
+4. []()
 
 ## Fermi-Hubbard Model 案例
 1.[Fermi-Hubbard model 1D](./开源框架学习%20Netket/FermiHubbard1D/前馈神经网络_FH.ipynb)
@@ -37,3 +37,15 @@
 2. 对于 H2 分子，FFNN 模型可以得到正确的基态结果，说明 FFNN 模型是可以用来模拟 H2 分子的。
 3. QNN 作为 ansatz 时，完全成功!
 
+
+## 统计参数
+
+```python
+import jax.tree_util as jtu
+
+# 统计参数量
+param_leaves = jtu.tree_leaves(nnx.state(ffnn_model, nnx.Param))
+total_params = sum(leaf.size for leaf in param_leaves)
+
+print(f"模型参数量: {total_params:,}")
+```
