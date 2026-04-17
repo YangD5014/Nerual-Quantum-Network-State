@@ -30,6 +30,10 @@
 1. [MCMC算法案例](./蒙特卡洛算法学习/Metropolis_Hastings_Algorithm.ipynb)
 
 
+## 激发态能量计算
+
+
+
 ## 目前的进展：
 1. 对于小分子$H_2$的模拟显示, 只有RBM模型可以得到正确的基态结果，可以逼近 FCI,其余模型只能逼近 Hartree-Fock 结果，说明根本没有找到关联性。需要调查出来 RBM 的不同。 
 - 要把 param_type 设为 complex, 才能得到正确的结果。  

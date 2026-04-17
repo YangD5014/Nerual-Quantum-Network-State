@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBM 与 FFNN 架构对比</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .networks-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .network-box {
+            width: 48%;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            position: relative;
+        }
+        .network-title {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #3498db;
+        }
+        .network-canvas {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #eee;
+            margin-bottom: 20px;
+        }
+        .network-description {
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+        .highlight {
+            background-color: #ffeb3b;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+        }
+        .comparison-table th, .comparison-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .comparison-table th {
+            background-color: #3498db;
+            color: white;
+        }
+        .comparison-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .toggle-button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .toggle-button:hover {
+            background-color: #2980b9;
+        }
+        .node {
+            fill: #3498db;
+            stroke: #2980b9;
+            stroke-width: 2px;
+        }
+        .node.hidden {
+            fill: #e74c3c;
+            stroke: #c0392b;
+        }
+        .node.visible {
+            fill: #2ecc71;
+            stroke: #27ae60;
+        }
+        .link {
+            stroke: #7f8c8d;
+            stroke-width: 1.5px;
+            fill: none;
+        }
+        .link.active {
+            stroke: #f39c12;
+            stroke-width: 2.5px;
+        }
+        .label {
+            font-size: 14px;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RBM 与 FFNN 架构对比可视化</h1>
+        
+        <div class="networks-container">
+            <div class="network-box">
+                <div class="network-title">受限玻尔兹曼机 (RBM)</div>
+                <svg id="rbm-canvas" class="network-canvas"></svg>
+                <div class="network-description">
+                    <p><strong>结构特点：</strong></p>
+                    <ul>
+                        <li>两层结构：<span class="highlight">可见层</span>和<span class="highlight">隐藏层</span></li>
+                        <li>层内无连接，只有层间连接</li>
+                        <li>双向连接，对称权重矩阵</li>
+                        <li>概率生成模型，可用于特征学习和降维</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="network-box">
+                <div class="network-title">前馈神经网络 (FFNN)</div>
+                <svg id="ffnn-canvas" class="network-canvas"></svg>
+                <div class="network-description">
+                    <p><strong>结构特点：</strong></p>
+                    <ul>
+                        <li>多层结构：输入层、<span class="highlight">多个隐藏层</span>、输出层</li>
+                        <li>单向前向传播，无反馈连接</li>
+                        <li>层内无连接，层间全连接或部分连接</li>
+                        <li>判别模型，主要用于分类和回归</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <button class="toggle-button" onclick="toggleHighlight()">切换高亮显示关键差异</button>
+        
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th>特性</th>
+                    <th>RBM (受限玻尔兹曼机)</th>
+                    <th>FFNN (前馈神经网络)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>网络结构</strong></td>
+                    <td>两层（可见层+隐藏层）</td>
+                    <td>多层（输入层+多个隐藏层+输出层）</td>
+                </tr>
+                <tr>
+                    <td><strong>连接方式</strong></td>
+                    <td>层间双向连接，层内无连接</td>
+                    <td>层间单向连接，层内无连接</td>
+                </tr>
+                <tr>
+                    <td><strong>学习算法</strong></td>
+                    <td>对比散度(CD)、持久对比散度(PCD)</td>
+                    <td>反向传播算法(BP)</td>
+                </tr>
+                <tr>
+                    <td><strong>模型类型</strong></td>
+                    <td>生成模型（无监督学习）</td>
+                    <td>判别模型（有监督学习）</td>
+                </tr>
+                <tr>
+                    <td><strong>主要应用</strong></td>
+                    <td>特征学习、降维、协同过滤</td>
+                    <td>分类、回归、函数逼近</td>
+                </tr>
+                <tr>
+                    <td><strong>在量子物理中的应用</strong></td>
+                    <td>波函数表示（变分量子蒙特卡洛）</td>
+                    <td>势能面拟合、哈密顿量学习</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let highlightMode = false;
+        
+        // 绘制RBM网络
+        function drawRBM() {
+            const svg = document.getElementById('rbm-canvas');
+            const width = svg.clientWidth;
+            const height = svg.clientHeight;
+            
+            // 清空SVG
+            svg.innerHTML = '';
+            
+            // 设置参数
+            const numVisible = 4;
+            const numHidden = 3;
+            const nodeRadius = 20;
+            const layerDistance = width / 3;
+            const startX = width / 2 - layerDistance / 2;
+            
+            // 创建可见层节点
+            for (let i = 0; i < numVisible; i++) {
+                const y = (height / (numVisible + 1)) * (i + 1);
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', startX);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', nodeRadius);
+                circle.setAttribute('class', 'node visible');
+                circle.setAttribute('id', 'rbm-visible-' + i);
+                svg.appendChild(circle);
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', startX);
+                text.setAttribute('y', y + 5);
+                text.setAttribute('class', 'label');
+                text.textContent = 'v' + (i+1);
+                svg.appendChild(text);
+            }
+            
+            // 创建隐藏层节点
+            for (let i = 0; i < numHidden; i++) {
+                const y = (height / (numHidden + 1)) * (i + 1);
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', startX + layerDistance);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', nodeRadius);
+                circle.setAttribute('class', 'node hidden');
+                circle.setAttribute('id', 'rbm-hidden-' + i);
+                svg.appendChild(circle);
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', startX + layerDistance);
+                text.setAttribute('y', y + 5);
+                text.setAttribute('class', 'label');
+                text.textContent = 'h' + (i+1);
+                svg.appendChild(text);
+            }
+            
+            // 创建连接（双向）
+            for (let i = 0; i < numVisible; i++) {
+                const y1 = (height / (numVisible + 1)) * (i + 1);
+                for (let j = 0; j < numHidden; j++) {
+                    const y2 = (height / (numHidden + 1)) * (j + 1);
+                    
+                    // 正向连接
+                    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line1.setAttribute('x1', startX + nodeRadius);
+                    line1.setAttribute('y1', y1);
+                    line1.setAttribute('x2', startX + layerDistance - nodeRadius);
+                    line1.setAttribute('y2', y2);
+                    line1.setAttribute('class', 'link');
+                    line1.setAttribute('id', 'rbm-link-' + i + '-' + j);
+                    svg.appendChild(line1);
+                    
+                    // 反向连接（用虚线表示）
+                    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line2.setAttribute('x1', startX + layerDistance - nodeRadius);
+                    line2.setAttribute('y1', y2);
+                    line2.setAttribute('x2', startX + nodeRadius);
+                    line2.setAttribute('y2', y1);
+                    line2.setAttribute('class', 'link');
+                    line2.setAttribute('stroke-dasharray', '5,5');
+                    svg.appendChild(line2);
+                }
+            }
+            
+            // 添加层标签
+            const visibleLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            visibleLabel.setAttribute('x', startX);
+            visibleLabel.setAttribute('y', 30);
+            visibleLabel.setAttribute('class', 'label');
+            visibleLabel.setAttribute('font-weight', 'bold');
+            visibleLabel.textContent = '可见层';
+            svg.appendChild(visibleLabel);
+            
+            const hiddenLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            hiddenLabel.setAttribute('x', startX + layerDistance);
+            hiddenLabel.setAttribute('y', 30);
+            hiddenLabel.setAttribute('class', 'label');
+            hiddenLabel.setAttribute('font-weight', 'bold');
+            hiddenLabel.textContent = '隐藏层';
+            svg.appendChild(hiddenLabel);
+        }
+        
+        // 绘制FFNN网络
+        function drawFFNN() {
+            const svg = document.getElementById('ffnn-canvas');
+            const width = svg.clientWidth;
+            const height = svg.clientHeight;
+            
+            // 清空SVG
+            svg.innerHTML = '';
+            
+            // 设置参数
+            const layers = [3, 4, 4, 2]; // 输入层、隐藏层1、隐藏层2、输出层
+            const nodeRadius = 20;
+            const layerDistance = width / (layers.length + 1);
+            
+            // 创建各层节点和连接
+            for (let l = 0; l < layers.length; l++) {
+                const x = layerDistance * (l + 1);
+                
+                // 创建节点
+                for (let i = 0; i < layers[l]; i++) {
+                    const y = (height / (layers[l] + 1)) * (i + 1);
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', x);
+                    circle.setAttribute('cy', y);
+                    circle.setAttribute('r', nodeRadius);
+                    
+                    // 根据层类型设置不同颜色
+                    if (l === 0) {
+                        circle.setAttribute('class', 'node visible');
+                        circle.setAttribute('id', 'ffnn-input-' + i);
+                    } else if (l === layers.length - 1) {
+                        circle.setAttribute('class', 'node hidden');
+                        circle.setAttribute('id', 'ffnn-output-' + i);
+                    } else {
+                        circle.setAttribute('class', 'node');
+                        circle.setAttribute('id', 'ffnn-hidden-' + l + '-' + i);
+                    }
+                    
+                    svg.appendChild(circle);
+                    
+                    // 添加节点标签
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', x);
+                    text.setAttribute('y', y + 5);
+                    text.setAttribute('class', 'label');
+                    
+                    if (l === 0) {
+                        text.textContent = 'x' + (i+1);
+                    } else if (l === layers.length - 1) {
+                        text.textContent = 'y' + (i+1);
+                    } else {
+                        text.textContent = 'h' + l + ',' + (i+1);
+                    }
+                    
+                    svg.appendChild(text);
+                }
+                
+                // 创建与前一层之间的连接（单向）
+                if (l > 0) {
+                    const prevX = layerDistance * l;
+                    
+                    for (let i = 0; i < layers[l]; i++) {
+                        const y = (height / (layers[l] + 1)) * (i + 1);
+                        
+                        for (let j = 0; j < layers[l-1]; j++) {
+                            const prevY = (height / (layers[l-1] + 1)) * (j + 1);
+                            
+                            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            line.setAttribute('x1', prevX + nodeRadius);
+                            line.setAttribute('y1', prevY);
+                            line.setAttribute('x2', x - nodeRadius);
+                            line.setAttribute('y2', y);
+                            line.setAttribute('class', 'link');
+                            line.setAttribute('id', 'ffnn-link-' + (l-1) + '-' + j + '-' + l + '-' + i);
+                            line.setAttribute('marker-end', 'url(#arrowhead)');
+                            svg.appendChild(line);
+                        }
+                    }
+                }
+            }
+            
+            // 添加箭头标记
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '10');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '3');
+            marker.setAttribute('orient', 'auto');
+            
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            polygon.setAttribute('points', '0 0, 10 3, 0 6');
+            polygon.setAttribute('fill', '#7f8c8d');
+            
+            marker.appendChild(polygon);
+            defs.appendChild(marker);
+            svg.appendChild(defs);
+            
+            // 添加层标签
+            const layerNames = ['输入层', '隐藏层1', '隐藏层2', '输出层'];
+            for (let l = 0; l < layers.length; l++) {
+                const x = layerDistance * (l + 1);
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', x);
+                label.setAttribute('y', 30);
+                label.setAttribute('class', 'label');
+                label.setAttribute('font-weight', 'bold');
+                label.textContent = layerNames[l];
+                svg.appendChild(label);
+            }
+        }
+        
+        // 切换高亮显示
+        function toggleHighlight() {
+            highlightMode = !highlightMode;
+            
+            if (highlightMode) {
+                // 高亮RBM的关键特征
+                document.querySelectorAll('.node.visible').forEach(node => {
+                    node.setAttribute('stroke-width', '4px');
+                });
+                document.querySelectorAll('.node.hidden').forEach(node => {
+                    node.setAttribute('stroke-width', '4px');
+                });
+                
+                // 高亮FFNN的关键特征
+                document.querySelectorAll('#ffnn-canvas .node').forEach(node => {
+                    if (node.id.includes('hidden-')) {
+                        node.setAttribute('stroke-width', '4px');
+                    }
+                });
+            } else {
+                // 恢复原始样式
+                document.querySelectorAll('.node').forEach(node => {
+                    node.setAttribute('stroke-width', '2px');
+                });
+            }
+        }
+        
+        // 初始化绘制
+        window.onload = function() {
+            drawRBM();
+            drawFFNN();
+        };
+        
+        // 响应窗口大小变化
+        window.onresize = function() {
+            drawRBM();
+            drawFFNN();
+        };
+    </script>
+</body>
+</html>
