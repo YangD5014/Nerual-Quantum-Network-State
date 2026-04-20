@@ -196,14 +196,6 @@ sampler_state = sampler.init_state(forward, (graphdef, variables), seed=1)
 
 # SR + SGD 优化器配置
 sgd = optax.sgd(learning_rate=0.01)  # SGD基础优化器（学习率可调）
-sr = SR(
-    sgd,
-    diag_shift=1e-4,    # Fisher矩阵对角移位（防止奇异，核心参数）
-    centered=True,      # 中心化Fisher矩阵，提升稳定性
-    holomorphic=False   # 非全纯函数（我们用了abs，所以设为False）
-)
-sr_state = sr.init(variables)  # 初始化SR状态
-
 # ==============================================================================
 # 6. 训练循环（SR+SGD）
 # ==============================================================================
