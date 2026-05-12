@@ -19,7 +19,8 @@
 NES‑VMC 将原系统前 \(K\) 个激发态的求解问题 **等价转化为一个“扩展系统”的基态求解问题**。
 
 - **扩展希尔伯特空间**：由 \(K\) 个原系统副本张量积构成，每个配置对应 \(K\) 个组态 \((\mathbf{x}^1, \dots, \mathbf{x}^K)\)。
-- **扩展系统波函数**：取为单粒子波函数的 Slater 行列式形式  
+- **扩展系统波函数**：取为单粒子波函数的 Slater 行列式形式 
+$$ 
   \[
   \Psi(\mathbf{x}^1, \dots, \mathbf{x}^K) = \det
   \begin{pmatrix}
@@ -28,6 +29,7 @@ NES‑VMC 将原系统前 \(K\) 个激发态的求解问题 **等价转化为一
   \psi_1(\mathbf{x}^K) & \cdots & \psi_K(\mathbf{x}^K)
   \end{pmatrix}
   \]
+  
 - **局域能量**：不是通常的 \((H\Psi)/\Psi\)，而是迹形式  
   \[
   E_L(\mathbf{X}) = \operatorname{Tr}\bigl( M^{-1}(\mathbf{X}) \, H_M(\mathbf{X}) \bigr)
