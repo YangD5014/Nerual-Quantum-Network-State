@@ -1,3 +1,176 @@
+# NES-VMC 算法在 NetKet 官方 API 中的复现
+
+## 1. 研究目的
+
+**目标**：完全基于 NetKet 框架的高层 API（`MCState`、`VMC` 驱动）复现 **NES-VMC（Natural Excited State Variational Monte Carlo）算法**，用于计算量子多体系统（如 H₂ 分子）的前 $K$ 个激发态能量。
+
+**要求**：
+
+- 使用 NetKet 内置的扩展希尔伯特空间 `hi ** K`
+- 使用 `MCState` 管理变分态与采样器
+- 使用 `VMC` 驱动自动执行训练循环
+- 最终通过训练得到的模型，对角化平均局域能量矩阵，获得基态与激发态能量
+
+## 2. NES-VMC 算法核心思想
+
+### 2.1 问题背景
+
+在量子力学中，我们通常需要求解哈密顿算符 $\hat{H}$ 的本征值问题，即找到最低的 $K$ 个本征函数。对于量子多体系统，直接对角化哈密顿矩阵通常是不可行的，因为希尔伯特空间的维度随粒子数指数增长。
+
+NES-VMC 将原系统前 $K$ 个激发态的求解问题**等价转化为一个"扩展系统"的基态求解问题**。
+
+### 2.2 扩展希尔伯特空间
+
+设 $x = (x_1, \dots, x_N)$ 表示一组包含 $N$ 个粒子的粒子集（particle set），其中 $x_i$ 表示第 $i$ 个粒子的状态。扩展希尔伯特空间由 $K$ 个原系统副本张量积构成，每个配置对应 $K$ 个组态 $\mathbf{x} = (x^1, \dots, x^K)$。
+
+### 2.3 TotalAnsatz 的构成
+
+设 $\psi_i$ 表示第 $i$ 个 $N$ 粒子波函数（可能未归一化），则 **TotalAnsatz** 定义为矩阵 $\Psi(\mathbf{x}) \in \mathbb{R}^{K \times K}$ 的行列式：
+
+$$
+\Psi(\mathbf{x}) \equiv \det\begin{pmatrix}
+\psi_1(x^1) & \psi_2(x^1) & \cdots & \psi_K(x^1) \\
+\psi_1(x^2) & \psi_2(x^2) & \cdots & \psi_K(x^2) \\
+\vdots & \vdots & \ddots & \vdots \\
+\psi_1(x^K) & \psi_2(x^K) & \cdots & \psi_K(x^K)
+\end{pmatrix}
+$$
+
+其中：
+
+- $\Psi(\mathbf{x}) \in \mathbb{R}^{K \times K}$：将所有电子集合与所有波函数结合的矩阵
+- $\psi_i(x^j)$：第 $i$ 个单态 Ansatz 在第 $j$ 个粒子集上的值
+- $\Psi(\mathbf{x}) = \det(\Psi(\mathbf{x}))$：总 Ansatz，可以看作是由 $N$ 粒子波函数组成的未归一化 Slater 行列式
+
+**关键性质**：通过将总 Ansatz 表示为单态 Ansatz 的行列式，可以防止不同 Ansatz 坍缩到同一状态，而不需要显式要求它们正交。
+
+### 2.4 扩展哈密顿量
+
+定义扩展哈密顿量 $\tilde{H} = \hat{H}_1 \oplus \hat{H}_2 \oplus \cdots \oplus \hat{H}_K$，其中 $\hat{H}_i$ 是仅作用于第 $i$ 个粒子集的哈密顿量。$\tilde{H}$ 的基态能量等于原系统 $\hat{H}$ 最低 $K$ 个能量之和，其基态波函数正是上述行列式形式的 $\Psi^\star$。
+
+## 3. 损失函数
+
+### 3.1 目标函数（Rayleigh 商）
+
+NES-VMC 的目标函数为扩展哈密顿量关于总 Ansatz 的 Rayleigh 商：
+
+$$
+\mathcal{L} = \frac{\langle\Psi|\tilde{H}|\Psi\rangle}{\langle\Psi|\Psi\rangle}
+$$
+
+利用矩阵行列式引理，可以将其重写为迹形式：
+
+$$
+\mathcal{L} = \frac{\langle\Psi|\tilde{H}|\Psi\rangle}{\det(S)} = \mathrm{Tr}\left(S^{-1}\hat{H}\right)
+$$
+
+其中 $S$ 为重叠矩阵：
+
+$$
+S = \begin{pmatrix}
+\langle\psi_1|\psi_1\rangle & \cdots & \langle\psi_1|\psi_K\rangle \\
+\vdots & \ddots & \vdots \\
+\langle\psi_K|\psi_1\rangle & \cdots & \langle\psi_K|\psi_K\rangle
+\end{pmatrix}
+$$
+
+### 3.2 局域能量矩阵
+
+通过 Monte Carlo 采样，损失函数可以写成期望值形式：
+
+$$
+\mathcal{L} = \mathbb{E}_{\mathbf{x} \sim \Psi^2}\left[\mathrm{Tr}\left(\Psi^{-1}(\mathbf{x})\tilde{H}\Psi(\mathbf{x})\right)\right]
+$$
+
+定义**局域能量矩阵**为：
+
+$$
+E_L(\mathbf{x}) \equiv \Psi^{-1}(\mathbf{x})\tilde{H}\Psi(\mathbf{x})
+$$
+
+这是一个 $K \times K$ 矩阵，其迹即为标量局域能量。当 $K = 1$ 时，这退化为标准 VMC 中的局域能量。
+
+**简化形式**：
+
+$$
+E_L(\mathbf{X}) = \operatorname{Tr}\bigl( M^{-1}(\mathbf{X}) \, H_M(\mathbf{X}) \bigr)
+$$
+
+其中 $M$ 为行列式矩阵，$H_M$ 为哈密顿量作用在每一列上的矩阵。
+
+## 4. 梯度公式
+
+### 4.1 标准 VMC 梯度回顾
+
+对于基态 VMC，能量关于变分参数 $\theta$ 的梯度为：
+
+$$
+\nabla_\theta \frac{\langle\psi|\hat{H}|\psi\rangle}{\langle\psi|\psi\rangle} = 2\mathbb{E}_{x \sim \psi^2}\left[\left(E_L(x) - \mathbb{E}_{x' \sim \psi^2}[E_L(x')]\right)\nabla_\theta \log|\psi(x)|\right]
+$$
+
+### 4.2 NES-VMC 梯度
+
+对于总 Ansatz，梯度计算类似。定义对数幅度：
+
+$$
+\log|\Psi(\mathbf{x})| = \log\det(\Psi(\mathbf{x})) = \mathrm{Tr}\left(\log(\Psi(\mathbf{x}))\right)
+$$
+
+梯度公式为：
+
+$$
+\nabla_\theta \mathcal{L} = 2\mathbb{E}_{\mathbf{x} \sim \Psi^2}\left[\left(E_L(\mathbf{x}) - \bar{E}_L\right)\nabla_\theta \log|\Psi(\mathbf{x})|\right]
+$$
+
+其中 $\bar{E}_L = \mathbb{E}_{\mathbf{x}' \sim \Psi^2}[E_L(\mathbf{x}')]$ 是局域能量矩阵的期望值。
+
+### 4.3 批量 walker 的梯度估计
+
+与标准 VMC 类似，可以使用同一批次中独立的 walker 来获得无偏梯度估计：
+
+$$
+\nabla_\theta \mathcal{L} = \frac{N-1}{2N}\mathbb{E}_{x_1,\dots,x_N}\left[\frac{1}{N}\sum_{i=1}^N\left(E_L(x_i) - \frac{1}{N}\sum_{j=1}^N E_L(x_j)\right)\nabla_\theta \log|\Psi(x_i)|\right]
+$$
+
+## 5. 激发态能量提取
+
+### 5.1 能量矩阵的对角化
+
+训练完成后，通过大量采样累积局域能量矩阵：
+
+$$
+\bar{E}_L = \mathbb{E}_{\mathbf{x} \sim \Psi^2}[E_L(\mathbf{x})]
+$$
+
+然后对 $\bar{E}_L$ 进行对角化：
+
+$$
+\bar{E}_L = U\Lambda U^{-1}
+$$
+
+其中 $\Lambda = \mathrm{diag}(E_1, E_2, \dots, E_K)$ 包含按能量排序的本征值。
+
+### 5.2 物理解释
+
+当单态 Ansatz 是本征函数的线性组合 $\psi_i = \sum_j a_{ij}\psi_j^\star$ 时，有：
+
+$$
+\Psi^{-1}\hat{H}\Psi = A^{-1}\Lambda A
+$$
+
+其中 $A$ 是系数矩阵。因此，通过对角化可以直接获得各激发态的能量 $E_1, E_2, \dots, E_K$。
+
+## 6. 关键特性总结
+
+- **扩展希尔伯特空间**：$K$ 个原系统副本的张量积
+- **Slater 行列式形式**：自动保证正交性（行列式为零条件）
+- **局域能量矩阵**：$K \times K$ 矩阵，迹为标量能量
+- **能量提取**：对角化平均局域能量矩阵获得各激发态能量
+
+以下是我的代码实现:
+Excited_VMC.py：
+
+```python
 """
 NES-VMC (Natural Excited State Variational Monte Carlo) 算法实现
 
@@ -139,43 +312,6 @@ def create_machine(model: NESTotalAnsatz):
         return log_psi_total
 
     return machine, graphdef, state
-
-
-
-
-
-def statistics(x):
-    """计算样本统计量"""
-    mean = jnp.mean(x)
-    var = jnp.var(x)
-    return mean, jnp.sqrt(var / x.shape[0])
-
-
-def Ham_psi(ha:nk.operator.DiscreteOperator, model, x):
-    """计算 Hψ(x)"""
-    x_primes, mels = ha.get_conn_padded(x)
-    psi_values = jax.vmap(model)(x_primes)
-    H_psi_x = jnp.sum(mels * psi_values)
-    return H_psi_x
-
-
-def Ham_Psi(ha, total_ansatz, x):
-    """计算扩展哈密顿量作用在总 Ansatz 上的矩阵"""
-    k = total_ansatz.n_states
-    if x.shape[0] != k:
-        raise ValueError(f"Input array must have shape ({k},) but got shape {x.shape}")
-
-    H_psi_x_i = []
-    for i in range(k):
-        tmp = []
-        for j in range(k):
-            ele = Ham_psi(ha, model=total_ansatz.single_ansatz_list[j], x=x[i])
-            tmp.append(ele)
-        H_psi_x_i.append(tmp)
-
-    HPsi = jnp.array(H_psi_x_i).reshape(k, k)
-    return HPsi
-
 
 def extract_excitation_energies(params, model_graphdef, K=2, n_samples=10000):
     """
@@ -333,53 +469,9 @@ def compute_QGT(model_graphdef, params, sigma):
 def apply_natural_gradient(grads, S, eps=1e-4):
     return jax.tree.map(lambda g, s: g / (s + eps), grads, S)
 
+```
+在这里我要重点介绍一下维度问题: 由于 hi_ext.all_states().shape = (N,K*n_spin_orbitals) 
+比如当 K=2 的时候, shape = (16,8)
+但是 NESTotalAnsatz 应该接受一个(K,n_spin_orbitals) 或者 (batch_size,K,n_spin_orbitals) 因此你可以看出来我在NESTotalAnsatz 内部的__call__ 针对接受x的做出了reshape。
+此外 sampler 产生的 samples 同样有维度问题 原生会产生的维度有两种:(n_samples,K*n_spin_orbitals) 或者 (batch_size,n_samples,K*n_spin_orbitals) 
 
-def compute_qgt(machine, params, sigma, diag_shift=0.1):
-    """
-    计算量子几何张量（QGT）/ F 矩阵
-    
-    QGT 定义：
-    S_ij = ⟨∂_i log ψ* ∂_j log ψ⟩ - ⟨∂_i log ψ*⟩⟨∂_j log ψ⟩
-    
-    这就是 NetKet SR 的核心
-    
-    参数：
-    - machine: 波函数机器
-    - params: 网络参数
-    - sigma: 样本 (n_samples, n_orbitals)
-    - diag_shift: 对角线正则化参数 λ
-    
-    返回：
-    - qgt_reg: 正则化后的 QGT 矩阵 (n_params, n_params)
-    - unravel_fn: 用于将展平的向量恢复为 PyTree 结构的函数
-    """
-    sigma = sigma.reshape(-1,2,4)
-    n_samples = sigma.shape[0]
-    
-    # 步骤 1: 计算每个样本的 ∇log ψ
-    def log_psi_single(p, s):
-        return machine(p, s)
-    
-    def compute_grad_for_sample(s):
-        return jax.grad(lambda p: log_psi_single(p, s), holomorphic=True)(params)
-    
-    # grad_matrix 是 PyTree，每个元素形状为 (n_samples, ...)
-    grad_matrix = jax.vmap(compute_grad_for_sample)(sigma)
-    
-    # 步骤 2: 将 PyTree 展平为矩阵 (n_samples, n_params)
-    grad_flat, unravel_fn = flatten_util.ravel_pytree(grad_matrix)
-    grad_flat = grad_flat.reshape(n_samples, -1)
-    
-    # 步骤 3: 中心化（减去均值）
-    # 这对应 QGT 定义中的第二项：- ⟨∂_i log ψ*⟩⟨∂_j log ψ⟩
-    grad_mean = jnp.mean(grad_flat, axis=0, keepdims=True)  # (1, n_params)
-    grad_centered = grad_flat - grad_mean  # (n_samples, n_params)
-    
-    # 步骤 4: 计算 QGT = (1/N) * Σ ∇log ψ* ∇log ψ^T
-    # 注意：对于复数，需要使用共轭
-    qgt = (1.0 / n_samples) * jnp.conj(grad_centered).T @ grad_centered
-    
-    # 步骤 5: 添加正则化
-    qgt_reg = qgt + diag_shift * jnp.eye(qgt.shape[0])
-    
-    return qgt_reg, unravel_fn
