@@ -111,22 +111,31 @@ class NESTotalAnsatz(nnx.Module):
                     val = self.single_ansatz_list[j](x_single[i])
                     row.append(val)
                 M.append(jnp.stack(row))
-            M = jnp.stack(M)  # (K, K)
-            log_det = jnp.linalg.det(M)
-            return log_det, M
+            log_M = jnp.stack(M)  # (K, K)
+            log_det = jnp.linalg.det(log_M)
+            return log_det, log_M
 
         # ----------------------
         # 自动判断：单条 / 批量
         # ----------------------
         if x.shape[-1] == self.n_spin:
             #print('A')
-            log_psi, log_M = _forward_single(x)
-        else:
-            #print('B')
+            if x.ndim ==2:
+                log_psi, log_M = _forward_single(x)
+            elif x.ndim ==3:
+                log_psi, log_M = jax.vmap(_forward_single)(x)
+            else:
+                raise ValueError(f"Input array must have shape ({self.K},) or got shape {x.shape}")
+        elif x.shape[-1] == self.n_spin * self.K:
             x = x.reshape(-1, K, self.n_spin)
             #print(f'转换后x.shape={x.shape}')
             log_psi, log_M = jax.vmap(_forward_single)(x)
+        else:
+            raise ValueError(f"Input array must have shape ({self.K},) or ({self.K},) but got shape {x.shape}")
         return log_psi, log_M
+    
+    
+    
 def create_machine(model: NESTotalAnsatz):
     """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
     graphdef, state = nnx.split(model)
@@ -333,6 +342,20 @@ def compute_QGT(model_graphdef, params, sigma):
 def apply_natural_gradient(grads, S, eps=1e-4):
     return jax.tree.map(lambda g, s: g / (s + eps), grads, S)
 
+
+
+def create_single_machine(model: SingleStateAnsatz):
+    """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        #print(f'x.shape: {sigma.shape}  ')
+        m = nnx.merge(graphdef, params)
+        log_psi_total = m(sigma)
+        return log_psi_total
+
+    return machine, graphdef, state
 
 def compute_qgt(machine, params, sigma, diag_shift=0.1):
     """

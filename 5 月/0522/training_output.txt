@@ -1,0 +1,22 @@
+/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0522/vmc_training_multi_chain.py:172: DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+  grad = jax.tree_map(lambda x: x * 2, grad)
+============================================================
+H₂ FCI 基准能量
+============================================================
+E0 = -1.01546825 Ha  |  激发能: 0.0000 eV
+E1 = -0.87542794 Ha  |  激发能: 3.8107 eV
+E2 = -0.42938376 Ha  |  激发能: 15.9482 eV
+E3 = -0.26922131 Ha  |  激发能: 20.3064 eV
+
+============================================================
+多链采样 VMC 训练 (自然梯度下降法)
+总样本数: 1008, 链数: 32
+============================================================
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0522/vmc_training_multi_chain.py", line 173, in <module>
+    qgt_reg, qgt_unravel_fun = compute_qgt(machine, params, samples, diag_shift=0.001)
+TypeError: Value <jax._src.util.HashablePartial object at 0x3065c0d00> with type <class 'jax._src.util.HashablePartial'> is not a valid JAX type
