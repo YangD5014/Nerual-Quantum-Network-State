@@ -197,6 +197,7 @@ def compute_qgt(machine, params, sigma, diag_shift=0.1):
 接下来的是, 我自制的 MCMC Sampler 相关代码
 你要重点关注 给出合理的修改意见
 ```python
+
 import jax
 import jax.numpy as jnp
 from functools import partial
@@ -206,118 +207,226 @@ def make_get_all_next_states(edges):
 
     @jax.jit
     def get_all_next_states_jit(S: jnp.ndarray):
-        s_arr = S
+        """
+        适配多链：S形状从 (n_orbitals,) → (n_chains, n_orbitals)
+        """
         next_states = []
         masks = []
 
         for (i, j) in edges:
-            occ_i = s_arr[i]
-            occ_j = s_arr[j]
+            occ_i = S[..., i]  # 多链维度：(n_chains,)
+            occ_j = S[..., j]
             valid = (occ_i == 1) & (occ_j == 0) | (occ_i == 0) & (occ_j == 1)
-            new_state = s_arr.at[i].set(occ_j).at[j].set(occ_i)
+            # 对每条链单独翻转i/j位
+            new_state = S.at[..., i].set(occ_j).at[..., j].set(occ_i)
             next_states.append(new_state)
             masks.append(valid)
 
+        # 输出形状：(n_edges, n_chains, n_orbitals) 和 (n_edges, n_chains)
         return jnp.stack(next_states), jnp.stack(masks)
     
     return get_all_next_states_jit
 
 # ==============================
-# ✅ 关键修改：接收 params
+# 改造1：MH步骤适配多链
 # ==============================
 def make_metropolis_hastings_step(edges, machine, params):
     get_all_next = make_get_all_next_states(edges)
     
     @jax.jit
     def metropolis_hastings_step_jit(S: jnp.ndarray, key: jax.Array):
-        candidates, valid_mask = get_all_next(S)
+        """
+        S: (n_chains, n_orbitals) → 多链状态
+        key: 随机数种子（每条链独立拆分）
+        """
+        n_chains = S.shape[0]
+        # 1. 生成候选状态：(n_edges, n_chains, n_orbitals)
+        candidates, valid_mask = get_all_next(S)  # valid_mask: (n_edges, n_chains)
+        
+        # 2. 每条链独立选候选（避免所有链选同一个edge）
         key, subk = jax.random.split(key)
-        idx = jax.random.choice(subk, candidates.shape[0])
+        subkeys = jax.random.split(subk, n_chains)  # (n_chains, 2)
+        # 对每条链采样候选索引
+        idx = jax.vmap(lambda k: jax.random.choice(k, candidates.shape[0]))(subkeys)  # (n_chains,)
+        
+        # 3. 按索引取候选状态（多链）
+        # 先构造索引：(n_chains,) → (n_chains, 2) (edge_idx, chain_idx)
+        chain_idx = jnp.arange(n_chains)
+        S_cand = candidates[idx, chain_idx]  # (n_chains, n_orbitals)
+        is_valid = valid_mask[idx, chain_idx]  # (n_chains,)
+
+        # 4. 计算接受率（多链并行）
+        log_psi_curr = machine(params, S)  # (n_chains,)
+        log_psi_cand = machine(params, S_cand)  # (n_chains,)
+        log_accept_ratio = 2 * jnp.real(log_psi_cand - log_psi_curr)  # (n_chains,)
+
+        # 5. 每条链独立判断是否接受
+        key, subk = jax.random.split(key)
+        subkeys = jax.random.split(subk, n_chains)
+        u = jax.vmap(lambda k: jax.random.uniform(k))(subkeys)  # (n_chains,)
+        accept = is_valid & (log_accept_ratio > jnp.log(u))  # (n_chains,)
+
+        # 6. 更新每条链的状态
+        S_new = jnp.where(accept[:, None], S_cand, S)  # 广播accept到(n_chains, n_orbitals)
+        return S_new, accept, key
+
+    return metropolis_hastings_step_jit
+
+# ==============================
+# 改造2：多链采样器核心
+@partial(jax.jit, static_argnums=(0,1,3,4,6))
+def mcmc_sampler_multichain(
+    n_samples_per_chain: int,  
+    n_warmup: int,
+    initial_states: jnp.ndarray,  # (n_chains, n_orbitals)
+    edges: tuple[tuple[int, int]],
+    machine: callable,
+    params: dict,  # 注意：params是PyTree，不是jnp.ndarray
+    seed: int = 42
+):
+    # 关键修改1：为每条链生成独立的随机数种子
+    key = jax.random.PRNGKey(seed)
+    chain_keys = jax.random.split(key, initial_states.shape[0])  # (n_chains, 2) → 每条链独立key
+    
+    # 绑定params到MH步骤（移除params绑定，改为每次传入）
+    mh_step = make_metropolis_hastings_step(edges, machine)  # 改造mh_step，不提前绑定params
+
+    # 预烧：每条链独立warmup
+    def warmup_loop(carry, _):
+        states, rngs = carry  # rngs: (n_chains, 2)
+        # 每条链独立执行MH步骤
+        def single_chain_step(state, rng):
+            new_state, _, new_rng = mh_step(params, state, rng)  # 传入params
+            return new_state, new_rng
+        
+        new_states, new_rngs = jax.vmap(single_chain_step)(states, rngs)
+        return (new_states, new_rngs), None
+
+    (current_states, chain_keys), _ = jax.lax.scan(
+        warmup_loop,
+        (initial_states, chain_keys),
+        xs=None,
+        length=n_warmup
+    )
+
+    # 采样：每条链独立采样 + 链内去相关（每隔10步取一个样本）
+    sample_interval = 10  # 去相关步长，复刻NetKet的n_discard_per_chain
+    effective_samples = n_samples_per_chain // sample_interval
+    
+    def sample_loop(carry, _):
+        states, rngs = carry
+        # 先执行sample_interval步MH，再取样本（去相关）
+        def multi_step_chain(state, rng):
+            def step(carry, _):
+                s, r = carry
+                new_s, _, new_r = mh_step(params, s, r)
+                return (new_s, new_r), None
+            (final_s, final_r), _ = jax.lax.scan(step, (state, rng), None, length=sample_interval)
+            return final_s, final_r
+        
+        new_states, new_rngs = jax.vmap(multi_step_chain)(states, rngs)
+        return (new_states, new_rngs), new_states
+
+    (_, _), samples = jax.lax.scan(
+        sample_loop,
+        (current_states, chain_keys),
+        xs=None,
+        length=effective_samples  # 仅保留去相关后的样本
+    )
+    # samples形状：(effective_samples, n_chains, n_orbitals)
+    samples = samples.reshape(-1, initial_states.shape[-1])
+    return samples
+
+# 同步修改make_metropolis_hastings_step：移除params提前绑定
+def make_metropolis_hastings_step(edges, machine):
+    get_all_next = make_get_all_next_states(edges)
+    
+    @jax.jit
+    def metropolis_hastings_step_jit(params, S: jnp.ndarray, key: jax.Array):
+        """
+        修改：params从外部传入，而非提前绑定
+        S: (n_orbitals,) → 单链状态（vmap后支持多链）
+        key: 单链独立key
+        """
+        # 1. 生成候选状态：(n_edges, n_orbitals)
+        candidates, valid_mask = get_all_next(S[None, ...])  # 扩展为(1, n_orbitals)适配get_all_next
+        candidates = candidates[:, 0, :]  # (n_edges, n_orbitals)
+        valid_mask = valid_mask[:, 0]    # (n_edges,)
+
+        # 2. 单链选候选
+        key, subk = jax.random.split(key)
+        idx = jax.random.choice(subk, len(edges))
         S_cand = candidates[idx]
         is_valid = valid_mask[idx]
 
-        # ==============================
-        # ✅ 完全正确：log_accept_ratio
-        # ==============================
+        # 3. 计算接受率（单链）
         log_psi_curr = machine(params, S)
         log_psi_cand = machine(params, S_cand)
         log_accept_ratio = 2 * jnp.real(log_psi_cand - log_psi_curr)
 
+        # 4. 单链判断接受
         key, subk = jax.random.split(key)
         u = jax.random.uniform(subk)
         accept = is_valid & (log_accept_ratio > jnp.log(u))
 
+        # 5. 更新状态
         S_new = jnp.where(accept, S_cand, S)
         return S_new, accept, key
 
     return metropolis_hastings_step_jit
 
 # ==============================
-# ✅ 核心修改：sampler 传入 params + machine
+# 改造3：生成多链随机初始状态（模拟NetKet的默认行为）
 # ==============================
-@partial(jax.jit, static_argnums=(0, 1, 3,4))
-def mcmc_sampler(
-    n_samples: int,
-    n_warmup: int,
-    initial_state: jnp.ndarray,
-    edges: tuple[tuple[int, int]],
-    machine: callable,    # 🔥 变成 NetKet 风格：machine(params, σ)
-    params: jnp.ndarray,  # 🔥 显式传入参数
-    seed: int = 42
-):
+def generate_random_initial_states(hilbert, n_chains: int, seed: int = 42):
+    """
+    模仿NetKet：从希尔伯特空间随机生成多链初始状态
+    hilbert: NetKet的SpinOrbitalFermions希尔伯特空间
+    n_chains: 链数
+    """
     key = jax.random.PRNGKey(seed)
-    # 🔥 把 params 绑定到 MH 步骤
-    mh_step = make_metropolis_hastings_step(edges, machine, params)
+    # 希尔伯特空间的随机采样（NetKet内部逻辑）
+    return hilbert.random_state(key, n_chains)
 
-    # 预烧
-    def warmup_loop(carry, _):
-        state, rng = carry
-        state, _, rng = mh_step(state, rng)
-        return (state, rng), None
 
-    (current_state, key), _ = jax.lax.scan(
-        warmup_loop,
-        (initial_state, key),
-        xs=None,
-        length=n_warmup
-    )
-
-    # 采样
-    def sample_loop(carry, _):
-        state, rng = carry
-        state, accepted, rng = mh_step(state, rng)
-        return (state, rng), state
-
-    (_, _), samples = jax.lax.scan(
-        sample_loop,
-        (current_state, key),
-        xs=None,
-        length=n_samples
-    )
-
-    return samples
-```
-
-以下是主要的训练代码：
-```python
-# ===================== 6. 初始化 =====================
 rngs = nnx.Rngs(21)
 model = SingleStateAnsatz(4, hidden_dim=12, rngs=rngs)
 machine, graphdef, params = create_machine(model)
 
-optimizer = optax.sgd(learning_rate=0.01)  # 学习率 0.01
+samples = mcmc_sampler_multichain(
+    n_samples_per_chain=100,
+    n_warmup=100,
+    initial_states=generate_random_initial_states(hi,16,2),
+    edges=((0,1),(2,3)),
+    machine=machine,
+    params=params,
+    seed=42
+)
+samples.shape
+
+```
+
+以下是主要的训练代码：
+```python
+# ===================== 6. 初始化（适配多链） =====================
+rngs = nnx.Rngs(21)
+model = SingleStateAnsatz(4, hidden_dim=12, rngs=rngs)
+machine, graphdef, params = create_machine(model)
+
+optimizer = optax.sgd(learning_rate=0.01)
 opt_state = optimizer.init(params)
 
-# 训练参数
-N_ITER = 300  # 迭代次数
-N_SAMPLES = 1008  # 样本数
+# 训练参数（调整为多链）
+N_ITER = 300
+N_CHAINS = 16  # 并行链数（可调，建议8-32）
+N_SAMPLES_PER_CHAIN = 100  # 每条链采样数 → 总样本数=16*63=1008（和原单链总样本数一致）
+N_WARMUP = 100
 
-# ===================== 7. 训练循环 =====================
+# ===================== 7. 训练循环（多链版本） =====================
 print("\n" + "="*60)
-print("开始纯 JAX VMC 训练 (自然梯度下降法)")
+print("开始多链 VMC 训练 (自然梯度下降法)")
 print("="*60)
 
-# 用于记录训练历史
 history = {
     'step': [],
     'energy': [],
@@ -326,30 +435,32 @@ history = {
 }
 
 for step in range(N_ITER):
-    # 1. 采样
-    samples = mcmc_sampler(n_samples=N_SAMPLES,
-                             n_warmup=200,
-                             initial_state=hi.all_states()[0],
-                             edges=((0, 1), (2, 3)),
-                             machine=machine,
-                             params=params,
-                             seed=21
-                             )
-    #samples = samples.reshape(-1, hi.size)
+    # 1. 生成多链随机初始状态（模仿NetKet，无需手动指定单个initial_state）
+    initial_states = generate_random_initial_states(hi, N_CHAINS, seed=21+step)  # 每次迭代换种子避免初始状态固定
     
-    # 2. 计算 force-based 能量和梯度
+    # 2. 多链采样（总样本数=16*63=1008，和原单链一致）
+    samples = mcmc_sampler_multichain(
+        n_samples_per_chain=N_SAMPLES_PER_CHAIN,
+        n_warmup=N_WARMUP,
+        initial_states=initial_states,
+        edges=((0, 1), (2, 3)),
+        machine=machine,
+        params=params,
+        seed=21+step
+    )
+    
+    # 3. 计算能量和自然梯度（逻辑和原代码一致）
     energy, energy_std, grad = forces_expect_hermitian(machine, params, samples)
     grad = jax.tree_map(lambda x: x*2, grad)
-    #qgt_reg, unravel_fn = compute_qgt(machine,params,samples.reshape(-1,4),0.001)
     qgt_reg,qgt_unravel_fun = compute_qgt(machine, params, samples, diag_shift=0.001) 
     grad_flat , grad_unravel_fn = flatten_util.ravel_pytree(grad)
   
-    #自然梯度 natural-gradient = S^{-1} * grad
+    # 自然梯度求解
     natural_grad = jnp.linalg.solve(qgt_reg, grad_flat)
     natural_grad = grad_unravel_fn(natural_grad)
     grad = natural_grad
         
-    # 4. 更新参数（自然梯度下降）
+    # 4. 更新参数
     updates, opt_state = optimizer.update(grad, opt_state, params)
     params = optax.apply_updates(params, updates)
     
@@ -376,16 +487,13 @@ print("="*60)
 以上基于自制的 Sampler 的 VMC 训练结果：
 
 ============================================================
-开始纯 JAX VMC 训练 (自然梯度下降法)
+开始多链 VMC 训练 (自然梯度下降法)
 ============================================================
-Step   0 | E: -0.48959155 ± 0.007651 | FCI: -1.01546825 | Error: 0.525877
-Step  50 | E: -0.95482157 ± 0.005416 | FCI: -1.01546825 | Error: 0.060647
-Step 100 | E: -0.95712966 ± 0.005291 | FCI: -1.01546825 | Error: 0.058339
-Step 150 | E: -0.95834233 ± 0.005274 | FCI: -1.01546825 | Error: 0.057126
-Step 200 | E: -0.96013594 ± 0.005096 | FCI: -1.01546825 | Error: 0.055332
-Step 250 | E: -0.96168614 ± 0.004974 | FCI: -1.01546825 | Error: 0.053782
-Step 300 | E: -0.96462023 ± 0.005070 | FCI: -1.01546825 | Error: 0.050848
-
+Step   0 | E: -0.50305463 ± 0.007761 | FCI: -1.01546825 | Error: 0.512414
+Step  50 | E: -0.98545635 ± 0.002506 | FCI: -1.01546825 | Error: 0.030012
+Step 100 | E: -1.00149581 ± 0.003946 | FCI: -1.01546825 | Error: 0.013972
+Step 150 | E: -0.65240585 ± 0.000000 | FCI: -1.01546825 | Error: 0.363062
+Step 200 | E: -0.65240585 ± 0.000000 | FCI: -1.01546825 | Error: 0.363062
 
 最为核心的问题是: 1.相比于 Netket的 Sampler, 为什么我的基态能量求解结果，能量下降更慢？
 如果使用 Netket的 Sampler，那么结果为:

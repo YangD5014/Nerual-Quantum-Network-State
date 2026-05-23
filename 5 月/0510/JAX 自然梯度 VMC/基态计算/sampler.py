@@ -143,3 +143,14 @@ def mcmc_sampler(
     )
 
     return samples
+
+
+def generate_random_initial_states(hilbert, n_chains: int, seed: int = 42):
+    """
+    模仿NetKet：从希尔伯特空间随机生成多链初始状态
+    hilbert: NetKet的SpinOrbitalFermions希尔伯特空间
+    n_chains: 链数
+    """
+    key = jax.random.PRNGKey(seed)
+    # 希尔伯特空间的随机采样（NetKet内部逻辑）
+    return hilbert.random_state(key, n_chains)
