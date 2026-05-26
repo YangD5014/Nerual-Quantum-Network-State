@@ -406,3 +406,142 @@ def compute_qgt(machine, params, sigma, diag_shift=0.1):
     qgt_reg = qgt + diag_shift * jnp.eye(qgt.shape[0])
     
     return qgt_reg, unravel_fn
+
+
+
+def generate_random_initial_states(hi, n_chains: int, seed: int = 42):
+    key = jax.random.PRNGKey(seed)
+    keys = jax.random.split(key, n_chains)
+    return jax.vmap(lambda k: hi.random_state(k))(keys)
+
+
+# ===================== 核心修改：K 作为显式参数传入 =====================
+def make_get_all_next_states(K: int, SINGLE_HILBERT_SIZE:int,edges):
+    """
+    K: 显式传入的扩展副本数（NES-VMC 的 K）
+    edges: 跃迁边，保持你的顺序不变
+    """
+    @jax.jit
+    def get_all_next_states_jit(S: jnp.ndarray):
+        next_states = []
+        valid_masks = []
+
+        for (i, j) in edges:
+            occ_i = S[..., i]
+            occ_j = S[..., j]
+            # 原始费米子跃迁有效条件
+            valid_hop = (occ_i != occ_j)
+
+            # 执行跃迁
+            new_state = S.at[..., i].set(occ_j).at[..., j].set(occ_i)
+
+            # ----------------------------------------------------------------
+            # 核心：按 K 切分 x1, x2, ..., xK
+            # ----------------------------------------------------------------
+            x_list = jnp.split(new_state, K, axis=-1)
+
+            # 检查：任意两个子组态不能相等
+            has_duplicate = False
+            for a in range(K):
+                for b in range(a + 1, K):
+                    equal = jnp.all(x_list[a] == x_list[b], axis=-1)
+                    has_duplicate = jnp.logical_or(has_duplicate, equal)
+
+            # 最终有效：能跃迁 + 无重复组态
+            valid = valid_hop & (~has_duplicate)
+            next_states.append(new_state)
+            valid_masks.append(valid)
+
+        return jnp.stack(next_states), jnp.stack(valid_masks)
+
+    return get_all_next_states_jit
+
+
+# ==============================================
+# 3. Metropolis 单步跃迁
+# ==============================================
+def make_metropolis_hastings_step(K: int, SINGLE_HILBERT_SIZE:int,edges, machine):
+    get_all_next = make_get_all_next_states(K,SINGLE_HILBERT_SIZE,edges)
+    
+    @jax.jit
+    def mh_step(params, state: jnp.ndarray, key: jax.Array):
+        candidates, valid_mask = get_all_next(state[None, :])
+        candidates = candidates[:, 0]
+        valid_mask = valid_mask[:, 0]
+        
+        key, subk = jax.random.split(key)
+        idx = jax.random.choice(subk, len(edges))
+        cand = candidates[idx]
+        is_valid = valid_mask[idx]
+        
+        log_curr = machine(params, state)
+        log_cand = machine(params, cand)
+        log_acc = 2 * jnp.real(log_cand - log_curr)
+        
+        key, subk = jax.random.split(key)
+        accept = is_valid & (log_acc > jnp.log(jax.random.uniform(subk)))
+        new_state = jnp.where(accept, cand, state)
+        return new_state, key
+    
+    return mh_step
+
+@partial(jax.jit, static_argnums=(0,1,3,4,6,7,8))
+def mcmc_sampler_multichain(
+    n_samples_per_chain: int,
+    n_warmup: int,             # 单位：sweep
+    sampler_state: tuple,      # ✅ NetKet 风格状态：(current_states, chain_keys)
+    edges: tuple,
+    machine: callable,
+    params: dict,
+    sweep_size: int = 32,       # ✅ 保留 sweep_size
+    K: int = 2,
+    SINGLE_HILBERT_SIZE: int = 4,
+):
+    # 解开 sampler_state（和 NetKet 完全一致）
+    current_states, current_keys = sampler_state
+    n_chains = current_states.shape[0]
+    mh_step = make_metropolis_hastings_step(K, SINGLE_HILBERT_SIZE, edges, machine)
+
+    # -------------------------
+    # 一次 sweep = 连续跳 sweep_size 次
+    # -------------------------
+    def single_sweep(carry, _):
+        states, keys = carry
+        # 多链并行 VMAP
+        (new_s, new_k), _ = jax.lax.scan(
+            lambda c, _: (jax.vmap(mh_step, in_axes=(None, 0, 0))(params, c[0], c[1]), None),
+            (states, keys),
+            length=sweep_size
+        )
+        return (new_s, new_k), new_s
+
+    # -------------------------
+    # 1) Warmup（仅更新状态，不保存样本）
+    # -------------------------
+    if n_warmup > 0:
+        (current_states, current_keys), _ = jax.lax.scan(
+            single_sweep, (current_states, current_keys), length=n_warmup
+        )
+
+    # -------------------------
+    # 2) 正式采样（保存样本 + 更新最终状态）
+    # -------------------------
+    (final_states, final_keys), samples = jax.lax.scan(
+        single_sweep, (current_states, current_keys), length=n_samples_per_chain
+    )
+
+    # 打包新的 sampler_state（返回给下一次迭代）
+    new_sampler_state = (final_states, final_keys)
+    
+    # 展平样本：[n_samples, n_chains, n_sites] → [n_samples*n_chains, n_sites]
+    #samples_flat = samples.reshape(-1, current_states.shape[-1])
+    return samples, new_sampler_state
+
+# 初始化链状态 + 随机数状态（构成 sampler_state）
+def init_sampler_state(hi, n_chains, seed=42):
+    init_states = generate_random_initial_states(hi, n_chains, seed)
+    key = jax.random.PRNGKey(seed)
+    chain_keys = jax.random.split(key, n_chains)  # 每条链独立随机数
+    return (init_states, chain_keys)
+
+

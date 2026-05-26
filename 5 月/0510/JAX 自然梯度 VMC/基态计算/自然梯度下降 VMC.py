@@ -10,6 +10,7 @@ import optax
 from tqdm import tqdm
 from functools import partial
 from jax import flatten_util
+import time
 
 
 # ==============================================================================
@@ -194,6 +195,7 @@ def compute_qgt(machine, params, sigma, diag_shift=0.1):
     
     return qgt_reg, unravel_fn
 
+
 # ===================== 6. 初始化 =====================
 rngs = nnx.Rngs(21)
 model = SingleStateAnsatz(4, hidden_dim=12, rngs=rngs)
@@ -219,7 +221,7 @@ history = {
     'energy_std': [],
     'error': []
 }
-
+start_time = time.time()
 for step in range(N_ITER):
     # 1. 采样
     sampler_state = sampler.reset(machine,params,sampler_state)
@@ -254,7 +256,8 @@ for step in range(N_ITER):
         history['energy_std'].append(float(energy_std))
         history['error'].append(float(error))
         print(f"Step {step:3d} | E: {energy.real:.8f} ± {energy_std:.6f} | FCI: {E_fcis[0]:.8f} | Error: {error:.6f}")
-
+end_time = time.time()
+print(f"训练耗时：{end_time - start_time:.2f} 秒")
 # 最终结果
 final_energy, final_std, _ = forces_expect_hermitian(machine, params, samples)
 final_error = jnp.abs(final_energy.real - E_fcis[0])
