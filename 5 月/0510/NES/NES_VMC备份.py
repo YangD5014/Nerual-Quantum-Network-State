@@ -197,7 +197,7 @@ def NES_loss_energy(ha, graphdef, params, x):
     log_psi_det, log_M = total_model(x)
     Psi_Matrix = jnp.exp(log_M)
     # 添加正则化项，防止矩阵奇异
-    #Psi_Matrix += 1e-6 * jnp.eye(Psi_Matrix.shape[0])
+    Psi_Matrix += 1e-6 * jnp.eye(Psi_Matrix.shape[0])
     H_psi_x = Ham_Psi(ha, total_model, x)
     Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix, H_psi_x)
     return jnp.real(jnp.trace(Psi_Matrix_inv)), Psi_Matrix_inv
@@ -214,15 +214,6 @@ def nes_vmc_gradient(ha: nk.operator.DiscreteOperator, graphdef, params, x_batch
     """
     # 1. 批量局域能量矩阵
     E_L_batch = compute_local_energy_matrix_batch(ha, graphdef, params, x_batch)
-    
-    valid_mask = ~jnp.any(
-        jnp.isnan(E_L_batch) | jnp.isinf(E_L_batch),
-        axis=(1, 2)
-    )
-    E_L_batch = E_L_batch[valid_mask]
-    x_batch = x_batch[valid_mask]
-
-    # 下面保持不变
     E_L_mean = jnp.mean(E_L_batch, axis=0)
     
     # 2. 计算 tr(E_loc) 和 tr(E_mean) → ✅ 加了 real
