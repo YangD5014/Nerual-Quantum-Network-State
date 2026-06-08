@@ -80,7 +80,7 @@ class NESTotalAnsatz(nnx.Module):
         self.K = n_states
         self.n_spin = n_spin_orbitals
 
-        self.single_ansatz_list =  nnx.List()
+        self.single_ansatz_list =  []
         key = rngs.params()
         for _ in range(n_states):
             key, sub_key = jax.random.split(key)
@@ -173,15 +173,22 @@ def statistics(x):
     var = jnp.var(x)
     return mean, jnp.sqrt(var / x.shape[0])
 
-def Ham_psi(ha: nk.operator.DiscreteOperator, model:SingleStateAnsatz, x):
-    """计算 Hψ(x)，model 输出 log_psi 时完全正确"""
+def Ham_psi(ha: nk.operator.DiscreteOperator, machine, params, x):
+    """
+    ✅ 正确、可微分、JAX 友好、适用于 NES-VMC
+    machine = 由 create_single_machine 生成
+    """
     x_primes, mels = ha.get_conn_padded(x)
-    # 1. 计算所有 σ' 的 log_psi
-    log_psi_vals = jax.vmap(model)(x_primes)
-    # 2. 指数还原成 ψ(σ')
+    
+    # 对所有连通的 x' 计算 logψ(x')
+    log_psi_vals = jax.vmap(lambda xp: machine(params, xp))(x_primes)
+    
+    # 指数还原
     psi_vals = jnp.exp(log_psi_vals)
-    # 3. 求和得到 Hψ(x)
+    
+    # Hψ = sum mel * ψ(x')
     H_psi_x = jnp.sum(mels * psi_vals)
+    
     return H_psi_x
 
 def Ham_Psi(ha: nk.operator.DiscreteOperator, total_ansatz:NESTotalAnsatz, x):

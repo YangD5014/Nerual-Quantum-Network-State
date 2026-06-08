@@ -21,7 +21,7 @@ from netket.operator._fermion2nd import FermionOperator2nd
 # ==============================================================================
 # 1. 全局参数 & H₂ 分子定义
 # ==============================================================================
-bond_length = 2.4
+bond_length = 1.4
 geometry = [('H', (0., 0., 0.)), ('H', (bond_length, 0., 0.))]
 mol = gto.M(atom=geometry, basis='STO-3G', verbose=0)
 mf = scf.RHF(mol).run(verbose=0)
@@ -43,12 +43,33 @@ hi = nk.hilbert.SpinOrbitalFermions(
     n_fermions_per_spin=(1,1),
 )
 
-ha = nkx.operator.from_pyscf_molecule(mol)
-# # 6. 导入 NetKet 的二次量子化哈密顿量
-# ha = FermionOperator2nd.from_openfermion(
-#     hilbert=hi,
-#     of_fermion_operator=fermion_op
-# )
+
+
+
+# 1. 分子
+bond_length = 1.4
+geometry = [('H', (0., 0., 0.)), ('H', (bond_length, 0., 0.))]
+
+# 2. OpenFermion MolecularData
+molecule = MolecularData(
+    geometry=geometry,
+    basis="sto-3g",
+    charge=0,
+    multiplicity=1
+)
+molecule = run_pyscf(molecule, run_scf=True, run_fci=False)
+
+# 3. 拿到 InteractionOperator（含1e、2e积分）
+interaction_op = molecule.get_molecular_hamiltonian()
+
+# 4. 官方：InteractionOperator → FermionOperator（二次量子化）
+fermion_op = get_fermion_operator(interaction_op)   # ✅ 正规API
+
+# 6. 导入 NetKet 的二次量子化哈密顿量
+ha = FermionOperator2nd.from_openfermion(
+    hilbert=hi,
+    of_fermion_operator=fermion_op
+)
 
 
 
