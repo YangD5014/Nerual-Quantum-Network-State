@@ -30,6 +30,16 @@ g = nk.graph.Graph(edges=single_edges)
 single_rule = nk.sampler.rules.FermionHopRule(hi, graph=g)
 tensor_rule = nk.sampler.rules.TensorRule(hi_ext, [single_rule] * K)
 
+total_ansatz = NESTotalAnsatz(4,K,12,rngs=nnx.Rngs(11))
+total_machine, total_graphdef,total_params = create_machine(total_ansatz)
+total_matrix_machine, total_graphdef,total_params = create_machine_matrix(total_ansatz)
+
+single_machine_list = []
+for ansatz in total_ansatz.single_ansatz_list:
+    m, g, p = create_single_machine(ansatz)
+    single_machine_list.append(m)
+    
+    
 @struct.dataclass
 class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
     edges: jnp.ndarray
@@ -78,141 +88,34 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
         keys = jax.random.split(rng, sigma_shape[0])
         return jax.vmap(gen_single)(keys)
     
-
-
-
-ext_edges = []
-for k in range(K):
-    offset = k * SINGLE_SIZE
-    for (i, j) in single_edges:
-        ext_edges.append((i + offset, j + offset))
-ext_edges = jnp.array(ext_edges)  # 转为jax数组（关键修复）
-
-nes_rule = NESFermionHopRule(edges=ext_edges)
-nes_sampler = nk.sampler.MetropolisSampler(
-    hilbert=hi_ext,
-    rule=nes_rule,
-    n_chains=16,
-    sweep_size=32
-)
-
-
-
-N_CHAINS = 16
-N_WARMUP = 100
-N_SAMPLES_PER_CHAIN = 200
-SWEEP_SIZE = 30
-N_ITER =50
-
-rngs = nnx.Rngs(42)
-total_ansatz = NESTotalAnsatz(4, n_states=K, hidden_dim=12, rngs=rngs)
-single_ansatz = SingleStateAnsatz(4, hidden_dim=8, rngs=rngs)
-total_machine, total_graphdef, total_params = create_machine(total_ansatz)
-total_matrix_machine, total_graphdef, total_params = create_machine_matrix(total_ansatz)
-
-single_machine_list = []
-for ansatz in total_ansatz.single_ansatz_list:
-    m, g, p = create_single_machine(ansatz)
-    single_machine_list.append(m)
     
-optimizer = optax.sgd(learning_rate=0.01)
-opt_state = optimizer.init(total_params)
+if __name__ == '__main__':
+    N_CHAINS = 16
+    N_WARMUP = 100
+    N_SAMPLES_PER_CHAIN = 200
+    SWEEP_SIZE = 30
+    N_ITER =50
 
-# 采样器状态初始化（替代原 init_sampler_state）
-sampler_rng = jax.random.PRNGKey(21)
-sampler_state = nes_sampler.init_state(total_machine, total_params, sampler_rng)
+    ext_edges = []
+    for k in range(K):
+        offset = k * SINGLE_SIZE
+        for (i, j) in single_edges:
+            ext_edges.append((i + offset, j + offset))
+    ext_edges = jnp.array(ext_edges)  # 转为jax数组（关键修复）
 
-# ==================== 训练循环（仅替换采样部分） ====================
-print("\n" + "="*60)
-print("开始多链 NES-VMC 训练 (NetKet 自定义采样器 + 朴素梯度下降)")
-print("="*60)
-print(f"基态能量={E_fcis[0]:.8f} Ha| 第一激发态能量={E_fcis[1]:.8f} Ha| 第二激发态能量={E_fcis[2]:.8f} Ha")
-
-history = {
-    'step': [],
-    'energy': [],
-    'energy_std': [],
-    'loss': [],
-    'params': [],
-    'E_Lmatrix':[],
-    'natural_grad':[],
-    'grad_flat':[],
-    'samples':[],
-    'log_Psi':[],
-    'log_M':[]
-}
-
-start_time = time.time()
-for step in range(N_ITER):
-    # 1. Warmup 烧链
-    _, sampler_state = nes_sampler.sample(
-        total_machine, total_params, sampler_state, chain_length=N_WARMUP
+    nes_rule = NESFermionHopRule(edges=ext_edges)
+    nes_sampler = nk.sampler.MetropolisSampler(
+        hilbert=hi_ext,
+        rule=nes_rule,
+        n_chains=16,
+        sweep_size=32
     )
-    # 2. 正式采样
+
+    sampler_state = nes_sampler.init_state(total_machine, total_params, seed=1)
     samples_raw, sampler_state = nes_sampler.sample(
-        total_machine, total_params, sampler_state, chain_length=N_SAMPLES_PER_CHAIN
+        total_machine, total_params, state=sampler_state, chain_length=2
     )
-        # 3. 维度重塑，适配梯度函数输入
-    samples = samples_raw.reshape(-1, hi_ext.size)
-    x_batch = samples.reshape(-1, K, 4)
-    # 3. 计算能量和自然梯度（逻辑和原代码一致）
-    grad, loss_mean, E_L_mean = nes_vmc_gradient(ha=ha,
-                                                 total_matrix_machine=total_matrix_machine,
-                                                 total_machine=total_machine,
-                                                 single_machine_list=single_machine_list,
-                                                 total_params=total_params,
-                                                 x_batch=samples.reshape(-1,K,4))
-    #grad = jax.tree_util.tree_map(lambda x: x * 2, grad)
-    
-    grad_flat , grad_unravel_fn = ravel_pytree(grad)
-    # qgt_reg, unravel_fn = compute_qgt(total_machine, total_params, samples.reshape(-1,2,4), diag_shift=0.1)
-    
-    # # # 自然梯度求解
-    # natural_grad_flat = jnp.linalg.solve(qgt_reg, grad_flat)
-    # natural_grad = grad_unravel_fn(natural_grad_flat)
-    # grad = natural_grad
-        
-    # 4. 更新参数
-    updates, opt_state = optimizer.update(grad, opt_state, total_params)
-    total_params = optax.apply_updates(total_params, updates)
-    
-    # 5. 记录历史
-    if step % 5 == 0 or step == N_ITER - 1:
-        # --------------------- 【NES-VMC 监控模板】直接用 ---------------------
-        # 1. 监控 log_Psi
-        log_Psi_batch = total_machine(total_params, samples.reshape(-1,K,4))
-        print(f"log_Psi: mean={log_Psi_batch.mean():.3f} | min={log_Psi_batch.min():.3f} | max={log_Psi_batch.max():.3f}")
-
-        # 2. 监控梯度范数
-        grad_norm = jnp.linalg.norm(grad_flat)
-        print(f"grad norm = {grad_norm:.4f}")
-
-        # 5. 局域能量矩阵
-        print(f"E_L mean =\n{E_L_mean}")
-    
-        eig_vals, eig_vecs = jnp.linalg.eigh(E_L_mean)
-        history['step'].append(step)
-        history['E_Lmatrix'].append(E_L_mean)
-        history['samples'].append(samples)
-        history['loss'].append(loss_mean)
-        # #history['natural_grad'].append(natural_grad)
-        # history['grad_flat'].append(grad_flat)
-        # history['log_Psi'].append(log_Psi)
-        # history['log_M'].append(log_M)
-        history['params'].append(total_params)
-        print(f"Step {step:3d} | Loss: {loss_mean}|0st能量={eig_vals[0]:.8f} Ha| 1st能量={eig_vals[1]:.8f} Ha")
-        # print(f'grad={grad_flat[30:31]}')
-        print('#-----------------------------------------#')
-
-
-end_time = time.time()
-print(f"训练耗时：{end_time - start_time:.2f} 秒")
-# 最终结果
-print("\n" + "="*60)
-print(f"训练完成!")
-# print(f"最终能量：{final_energy.real:.8f} ± {final_std:.6f} Ha")
-# print(f"FCI 基准：{E_fcis[0]:.8f} Ha")
-# print(f"绝对误差：{final_error:.6f} Ha")
-# print(f"相对误差：{final_error / jnp.abs(E_fcis[0]) * 100:.4f}%")
-print("="*60)
-
+    samples_raw.shape
+    samples = samples_raw.reshape(-1, hi_ext.size)[0:2]
+    print(samples.shape)
+    print(samples)

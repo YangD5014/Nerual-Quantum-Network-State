@@ -21,6 +21,7 @@ import jax
 import time
 from functools import partial
 from jax.flatten_util import ravel_pytree
+from collections import Counter
 
 # ==============================================================================
 # 1. 全局参数 & H₂ 分子定义
@@ -92,22 +93,16 @@ class NESTotalAnsatz(nnx.Module):
             # 形状：[K, n_spin]
             #print(f'x_single.shape: {x_single.shape}')
             x_single = x_single.reshape(self.K, self.n_spin)
-            # ==============================
-            # 正确构建 L_ij = log ψ_j(x^i)
-            # 无vmap错误 ！！！
-            # ==============================
             L = jnp.zeros((self.K, self.K), dtype=complex)
             for i in range(self.K):
                 for j in range(self.K):
                     L = L.at[i, j].set(
                         self.single_ansatz_list[j](x_single[i])
                     )
-
-            Psi_matrix = jnp.exp(L)
-            sign, log_abs_det = jnp.linalg.slogdet(Psi_matrix)
+                    
+            sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L))
             log_Psi = log_abs_det + 1j * jnp.angle(sign)
-            
-            return log_Psi, L
+            return log_Psi, L  
         
         # 安全的批量处理
         if x.ndim == 2 and x.shape[-1] == self.n_spin:
@@ -127,6 +122,7 @@ class NESTotalAnsatz(nnx.Module):
             return _forward_single(x)
         else:
             raise ValueError(f'不支持的输入形状: {x.shape}')
+            
             
     
 def create_machine(model: NESTotalAnsatz):
@@ -271,9 +267,9 @@ def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total
     E_L_mean = jnp.mean(E_L_batch, axis=0)
     #print(f'E_L_batch.shape={E_L_batch.shape}')
     
-    tr_batch = loss_batch
-    tr_mean = tr_batch.mean()
-    tr_centered = tr_batch - tr_mean  # ✅ 正确的权重
+    E_L_centered = E_L_batch - E_L_mean
+    
+    tr_centered =  jnp.trace(E_L_centered, axis1=-2, axis2=-1) 
 
     grad_logPsi = jax.grad(total_machine, argnums=0, holomorphic=True)
     vmap_grad_logPsi = jax.vmap(grad_logPsi, in_axes=(None, 0))
@@ -380,59 +376,6 @@ def init_sampler_state(hi, n_chains, seed=42):
     key = jax.random.PRNGKey(seed)
     chain_keys = jax.random.split(key, n_chains)  # 每条链独立随机数
     return (init_states, chain_keys)
-
-# ==============================================================================
-
-
-def compute_qgt(machine, params, sigma, diag_shift=0.1):
-    """
-    计算量子几何张量（QGT）/ F 矩阵
-    
-    QGT 定义：
-    S_ij = ⟨∂_i log ψ* ∂_j log ψ⟩ - ⟨∂_i log ψ*⟩⟨∂_j log ψ⟩
-    
-    这就是 NetKet SR 的核心
-    
-    参数：
-    - machine: 波函数机器
-    - params: 网络参数
-    - sigma: 样本 (n_samples, n_orbitals)
-    - diag_shift: 对角线正则化参数 λ
-    
-    返回：
-    - qgt_reg: 正则化后的 QGT 矩阵 (n_params, n_params)
-    - unravel_fn: 用于将展平的向量恢复为 PyTree 结构的函数
-    """
-    sigma = sigma.reshape(-1,2,4)
-    n_samples = sigma.shape[0]
-    
-    # 步骤 1: 计算每个样本的 ∇log ψ
-    def log_psi_single(p, s):
-        return machine(p, s)
-    
-    def compute_grad_for_sample(s):
-        return jax.grad(lambda p: log_psi_single(p, s), holomorphic=True)(params)
-    
-    # grad_matrix 是 PyTree，每个元素形状为 (n_samples, ...)
-    grad_matrix = jax.vmap(compute_grad_for_sample)(sigma)
-    
-    # 步骤 2: 将 PyTree 展平为矩阵 (n_samples, n_params)
-    grad_flat, unravel_fn = flatten_util.ravel_pytree(grad_matrix)
-    grad_flat = grad_flat.reshape(n_samples, -1)
-    
-    # 步骤 3: 中心化（减去均值）
-    # 这对应 QGT 定义中的第二项：- ⟨∂_i log ψ*⟩⟨∂_j log ψ⟩
-    grad_mean = jnp.mean(grad_flat, axis=0, keepdims=True)  # (1, n_params)
-    grad_centered = grad_flat - grad_mean  # (n_samples, n_params)
-    
-    # 步骤 4: 计算 QGT = (1/N) * Σ ∇log ψ* ∇log ψ^T
-    # 注意：对于复数，需要使用共轭
-    qgt = (1.0 / n_samples) * jnp.conj(grad_centered).T @ grad_centered
-    
-    # 步骤 5: 添加正则化
-    qgt_reg = qgt + diag_shift * jnp.eye(qgt.shape[0])
-    
-    return qgt_reg, unravel_fn
 
 # ===================== 核心修改：K 作为显式参数传入 =====================
 def make_get_all_next_states(K: int, SINGLE_HILBERT_SIZE:int,edges):
@@ -557,10 +500,6 @@ def mcmc_sampler_multichain(
     return samples, new_sampler_state
 
 
-
-
-
-
 def compute_nes_qgt(machine, graphdef, params, samples, diag_shift=0.01):
     """
     ###########################################################
@@ -661,6 +600,69 @@ def compute_qgt(machine, params, sigma, diag_shift=0.1):
     
     return qgt_reg, unravel_fn
 
+SINGLE_SIZE = hi.size
+@nk.utils.struct.dataclass
+class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
+    # 【仅保留edges：JAX只允许存jax数组，彻底删除hi_ext！】
+    edges: jnp.ndarray
+
+    def _check_duplicate(self, sigma_ext):
+        """NES约束：子组态不重复（直接用全局K和SINGLE_SIZE，完全安全）"""
+        sub = sigma_ext.reshape((*sigma_ext.shape[:-1], K, SINGLE_SIZE))
+        return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1)
+
+    def transition(self, sampler, machine, parameters, state, rng, sigma):
+        """跃迁规则（无修改）"""
+        batch_size = sigma.shape[0]
+        key1, key2 = jax.random.split(rng)
+
+        e_idx = jax.random.randint(key1, (batch_size,), 0, self.edges.shape[0])
+        sel_e = self.edges[e_idx]
+        i, j = sel_e[:,0], sel_e[:,1]
+
+        sigma_cand = sigma.at[jnp.arange(batch_size),i].set(sigma[jnp.arange(batch_size),j])
+        sigma_cand = sigma_cand.at[jnp.arange(batch_size),j].set(sigma[jnp.arange(batch_size),i])
+
+        invalid = self._check_duplicate(sigma_cand)
+        new_sigma = jnp.where(invalid[:, None], sigma, sigma_cand)
+
+        return new_sigma, None
+
+    def random_state(self, sampler, machine, parameters, state, rng):
+        """【核心修复】用 sampler.hilbert 替代自定义hi_ext（NetKet标准写法，永不报错）"""
+        sigma_shape = state.σ.shape
+        # 直接从采样器获取希尔伯特空间（官方标准用法，100%兼容JAX）
+        hilbert = sampler.hilbert
+
+        def gen_single(key):
+            max_tries = 100  # 防死循环
+            def cond(c): 
+                return (c[0] < max_tries) & c[2]
+            
+            def body(c):
+                tries, k, _, _ = c
+                k, k_new = jax.random.split(k)  # 每次更新RNG，防死循环
+                s = hilbert.random_state(k_new)
+                is_dup = self._check_duplicate(s)
+                return (tries + 1, k, is_dup, s)
+            
+            init_c = (0, key, True, hilbert.random_state(key))
+            final_c = jax.lax.while_loop(cond, body, init_c)
+            tries, _, is_dup, s = final_c
+            return jax.lax.cond(is_dup, lambda: hilbert.random_state(key), lambda: s)
+        
+        keys = jax.random.split(rng, sigma_shape[0])
+        return jax.vmap(gen_single)(keys)
+    
+
+def sampler_info(samples:jnp.array,K:int):
+    test_samples = np.array(samples.reshape(-1, 4*K))
+    count = Counter(tuple(each_row.tolist()) for each_row in test_samples)
+    for tpl, count_ in count.items():
+        print(f"元组 {tpl} 出现了 {count_} 次")
+    return count
+
+    
 import time
 # ======================
 # 超参数

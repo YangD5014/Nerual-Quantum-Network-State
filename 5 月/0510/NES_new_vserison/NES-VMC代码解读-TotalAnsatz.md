@@ -264,19 +264,13 @@ hi_ext.all_states()
        [1, 0, 1, 0, 1, 0, 0, 1],
        [1, 0, 1, 0, 1, 0, 1, 0]], dtype=int8)
 ```
-后面会提到虽然损失函数的定义是：$\Psi(\mathbf{x})^{-1}\hat{\mathcal{H}}\Psi(\mathbf{x})$ , 这里的 $\mathcal{H}$ 是指拓展哈密顿量 $\tilde{H}$。  
-但是可以被等价地看作下面的式子:
-$$ \begin{align*}
-\Psi(\mathbf{x})^{-1}\hat{\mathcal{H}}\Psi(\mathbf{x})
-&= \mathrm{Tr}\left[ \Psi^{-1}(\mathbf{x})\hat{H}\Psi(\mathbf{x}) \right]
-\end{align*} $$
-其中的 $\hat{H}\Psi(\mathbf{x})$ 由下面的  `Ham_psi` 和 `Ham_Psi` 函数给出
 
 ### 2.5 Ham_psi 和 Ham_Psi 函数  
 由于 NES-VMC 的损失函数(对应着原文 Eq.29 )
 TotalAnsatz的值是: $\Psi(\mathbf{X})$或者$\ln{\Psi(\mathbf{x})}$ 
 这里的 X 与 x的区别你也是知道的
-SingleStateAnsatz的输出是$\ln(\psi(\mathbf{x}))$ 
+SingleStateAnsatz的输出是$\ln(\psi(\mathbf{x}))$
+
 $$
 \hat{H}\Psi(\mathbf{x}) \triangleq 
 \begin{pmatrix}
@@ -360,145 +354,6 @@ def Ham_Psi(ha, single_machine_list, total_params, x):
 ```
 其中`Ham_psi` 是用来计算 $\hat{H}\psi_1(\mathbf{x}^1)$  
 `Ham_Psi` 是用来计算 $\hat{H}\Psi(\mathbf{x})$  
-### 2.6 采样器的设置  
-
-在 NES-VMC 算法中，采样器需要在**扩展希尔伯特空间** $\mathbf{x} = (x^1, x^2, \ldots, x^K)$ 上进行，一次性采样 K 个组态, 其中每个 $x^k$ 属于原系统的希尔伯特空间 $\hat{H}$。  
-我基于 Netket 的 Sampler + 自定义Rule 来构成了 NES-VMC 的采样器。
-
-```python
-# 单系统希尔伯特空间
-hi = nk.hilbert.SpinOrbitalFermions(
-    n_orbitals=2,
-    s=1/2,
-    n_fermions_per_spin=(1,1),
-)
-K = 2  # NES 扩展副本数
-hi_ext = hi ** K  # 扩展希尔伯特空间
-SINGLE_SIZE = hi.size  # 单个子系统维度 = 4
-single_edges = ((0, 1), (2, 3))  # 费米子跃迁边
-g = nk.graph.Graph(edges=single_edges)
-single_rule = nk.sampler.rules.FermionHopRule(hi, graph=g)
-tensor_rule = nk.sampler.rules.TensorRule(hi_ext, [single_rule] * K)
-
-total_ansatz = NESTotalAnsatz(4,K,12,rngs=nnx.Rngs(11))
-total_machine, total_graphdef,total_params = create_machine(total_ansatz)
-total_matrix_machine, total_graphdef,total_params = create_machine_matrix(total_ansatz)
-
-single_machine_list = []
-for ansatz in total_ansatz.single_ansatz_list:
-    m, g, p = create_single_machine(ansatz)
-    single_machine_list.append(m)
-
-N_CHAINS = 16
-N_WARMUP = 100
-N_SAMPLES_PER_CHAIN = 200
-SWEEP_SIZE = 30
-N_ITER =50
-SINGLE_SIZE = hi.size  # 单个子系统维度 = 4
-
-ext_edges = []
-for k in range(K):
-    offset = k * SINGLE_SIZE
-    for (i, j) in single_edges:
-        ext_edges.append((i + offset, j + offset))
-ext_edges = jnp.array(ext_edges)  # 转为jax数组（关键修复）
-print(ext_edges)
-
-nes_rule = NESFermionHopRule(edges=ext_edges)
-nes_sampler = nk.sampler.MetropolisSampler(
-    hilbert=hi_ext,
-    rule=nes_rule,
-    n_chains=16,
-    sweep_size=20
-)
-
-sampler_state = nes_sampler.init_state(total_machine, total_params, seed=1)
-samples_raw, sampler_state = nes_sampler.sample(
-    total_machine, total_params, state=sampler_state, chain_length=40
-)
-samples_raw.shape
-
-```
-
-#### 核心约束：禁止重复组态
-
-**关键约束**：扩展态必须满足 $x^i \neq x^j$（当 $i \neq j$ 时）。这是因为总 Ansatz 的行列式结构要求各副本的组态必须互不相同，否则矩阵 $\Psi(\mathbf{x})$ 将出现相同的行/列，导致行列式为零。
-
-对于 $K=2$ 的情况，扩展态的合法构型数为 $N_s^2 - N_s = 4^2 - 4 = 12$（其中 $N_s=4$ 是 $H_2$ 分子的单系统希尔伯特空间维度），而非简单的 $4^2 = 16$。
-
-#### 方案 1：NetKet 内置采样器
-
-代码使用 NetKet 的 `TensorRule` 来构建扩展希尔伯特空间的采样器：
-
-```python
-edges = [(0, 1), (2, 3)]
-g = nk.graph.Graph(edges=edges)
-single_rule = nk.sampler.rules.FermionHopRule(hi, graph=g)
-tensor_rule = nk.sampler.rules.TensorRule(hi_ext, [single_rule] * K)
-sampler = nk.sampler.MetropolisSampler(hi_ext, rule=tensor_rule, n_chains=100, sweep_size=32)
-```
-
-其中：
-- `FermionHopRule`：在单系统希尔伯特空间上执行费米子跃迁（满足粒子数守恒）
-- `TensorRule`：将单系统采样规则复制 $K$ 份，应用到扩展希尔伯特空间
-
-完整代码:
-```python
-@nk.utils.struct.dataclass
-class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
-    # 【仅保留edges：JAX只允许存jax数组，彻底删除hi_ext！】
-    edges: jnp.ndarray
-
-    def _check_duplicate(self, sigma_ext):
-        """NES约束：子组态不重复（直接用全局K和SINGLE_SIZE，完全安全）"""
-        sub = sigma_ext.reshape((*sigma_ext.shape[:-1], K, SINGLE_SIZE))
-        return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1)
-
-    def transition(self, sampler, machine, parameters, state, rng, sigma):
-        """跃迁规则（无修改）"""
-        batch_size = sigma.shape[0]
-        key1, key2 = jax.random.split(rng)
-
-        e_idx = jax.random.randint(key1, (batch_size,), 0, self.edges.shape[0])
-        sel_e = self.edges[e_idx]
-        i, j = sel_e[:,0], sel_e[:,1]
-
-        sigma_cand = sigma.at[jnp.arange(batch_size),i].set(sigma[jnp.arange(batch_size),j])
-        sigma_cand = sigma_cand.at[jnp.arange(batch_size),j].set(sigma[jnp.arange(batch_size),i])
-
-        invalid = self._check_duplicate(sigma_cand)
-        new_sigma = jnp.where(invalid[:, None], sigma, sigma_cand)
-
-        return new_sigma, None
-
-    def random_state(self, sampler, machine, parameters, state, rng):
-        """【核心修复】用 sampler.hilbert 替代自定义hi_ext（NetKet标准写法，永不报错）"""
-        sigma_shape = state.σ.shape
-        # 直接从采样器获取希尔伯特空间（官方标准用法，100%兼容JAX）
-        hilbert = sampler.hilbert
-
-        def gen_single(key):
-            max_tries = 100  # 防死循环
-            def cond(c): 
-                return (c[0] < max_tries) & c[2]
-            
-            def body(c):
-                tries, k, _, _ = c
-                k, k_new = jax.random.split(k)  # 每次更新RNG，防死循环
-                s = hilbert.random_state(k_new)
-                is_dup = self._check_duplicate(s)
-                return (tries + 1, k, is_dup, s)
-            
-            init_c = (0, key, True, hilbert.random_state(key))
-            final_c = jax.lax.while_loop(cond, body, init_c)
-            tries, _, is_dup, s = final_c
-            return jax.lax.cond(is_dup, lambda: hilbert.random_state(key), lambda: s)
-        
-        keys = jax.random.split(rng, sigma_shape[0])
-        return jax.vmap(gen_single)(keys)
-```
-
-
 ## 3. 损失函数
 
 ### 3.1 目标函数（Rayleigh 商）
@@ -526,33 +381,6 @@ def NES_loss_energy(ha, total_matrix_machine,single_machine_list,total_params, x
     H_psi_x = Ham_Psi(ha,single_machine_list,total_params,x)
     Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix, H_psi_x)
     return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv
-
-def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total_machine,single_machine_list,total_params, x_batch):
-    # 1. 批量局域能量矩阵
-    loss_batch,E_L_batch = NES_loss_energy(ha, total_matrix_machine, single_machine_list, total_params, x_batch)
-    E_L_mean = jnp.mean(E_L_batch, axis=0)
-    #print(f'E_L_batch.shape={E_L_batch.shape}')
-    
-    E_L_centered = E_L_batch - E_L_mean
-    
-    tr_centered =  jnp.trace(E_L_centered, axis1=-2, axis2=-1) 
-
-    grad_logPsi = jax.grad(total_machine, argnums=0, holomorphic=True)
-    vmap_grad_logPsi = jax.vmap(grad_logPsi, in_axes=(None, 0))
-
-    # 4. 计算 ∇logΨs
-    dlogPsi_batch = vmap_grad_logPsi(total_params, x_batch)
-
-    # 5. 核心加权平均
-    def weight_and_mean(grad_component):
-        weights = tr_centered.reshape( (-1,) + (1,)*(grad_component.ndim - 1) )
-        return jnp.mean(weights * jnp.conj(grad_component), axis=0)
-
-    grad = jax.tree.map(weight_and_mean, dlogPsi_batch)
-
-    loss_mean = loss_batch.mean()
-    return grad, loss_mean, E_L_mean
-
 ```
 
 ### 3.2 局域能量矩阵
@@ -560,14 +388,14 @@ def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total
 通过 Monte Carlo 采样，损失函数可以写成期望值形式：
 
 $$
-\mathcal{L} = \mathbb{E}_{\mathbf{x} \sim \Psi^2}\left[\mathrm{Tr}\left(\Psi^{-1}(\mathbf{x})\hat{H}\Psi(\mathbf{x})\right)\right]
+\mathcal{L} = \mathbb{E}_{\mathbf{x} \sim \Psi^2}\left[\mathrm{Tr}\left(\Psi^{-1}(\mathbf{x})\tilde{H}\Psi(\mathbf{x})\right)\right]
 
 $$
 
 定义**局域能量矩阵**为：
 
 $$
-E\_L(\mathbf{x}) \equiv \Psi^{-1}(\mathbf{x})\hat{H}\Psi(\mathbf{x})
+E\_L(\mathbf{x}) \equiv \Psi^{-1}(\mathbf{x})\tilde{H}\Psi(\mathbf{x})
 
 $$
 
@@ -631,7 +459,7 @@ def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total
     vmap_grad_logPsi = jax.vmap(grad_logPsi, in_axes=(None, 0))
 
     # 4. 计算 ∇logΨs
-    dlogPsi_batch = vmap_grad_logPsia(total_params, x_batch)
+    dlogPsi_batch = vmap_grad_logPsi(total_params, x_batch)
 
     # 5. 核心加权平均
     def weight_and_mean(grad_component):
@@ -642,6 +470,8 @@ def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total
 
     loss_mean = loss_batch.mean()
     return grad, loss_mean, E_L_mean
+
+
 ```
 
 ### 4.3 批量 walker 的梯度估计
@@ -653,42 +483,8 @@ $$
 
 $$
 
-## 5. 激发态能量提取
-
-### 5.1 能量矩阵的对角化
-
-训练完成后，通过大量采样累积局域能量矩阵：
-
-$$
-\bar{E}_L = \mathbb{E}_{\mathbf{x} \sim \Psi^2}[E_L(\mathbf{x})]
-
-$$
-
-然后对 $\bar{E}\_L$ 进行对角化：
-
-$$
-\bar{E}_L = U\Lambda U^{-1}
-
-$$
-
-其中 $\Lambda = \mathrm{diag}(E\_1, E\_2, \dots, E\_K)$ 包含按能量排序的本征值。
-
-### 5.2 物理解释
-
-当单态 Ansatz 是本征函数的线性组合 $\psi\_i = \sum\_j a\_{ij}\psi\_j^\star$ 时，有：
-
-$$
-\Psi^{-1}\hat{H}\Psi = A^{-1}\Lambda A
-
-$$
-
-其中 $A$ 是系数矩阵。因此，通过对角化可以直接获得各激发态的能量 $E\_1, E\_2, \dots, E\_K$。
-以下代码不要更改 需要强调的是 edges =[α1,α2,β1,β2] 这样的顺序
-
-
-## 6.测试案例
+## 5.训练代码  
 ```python
-
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
@@ -699,16 +495,36 @@ sys.path.append('..')
 from NES_VMC import NESTotalAnsatz, create_machine,init_sampler_state,\
     generate_random_initial_states,ha,SingleStateAnsatz,create_single_machine,\
         create_machine_matrix,Ham_psi,Ham_Psi,NES_loss_energy,nes_vmc_gradient,hi,E_fcis,mcmc_sampler_multichain,\
-            compute_qgt
+        NESFermionHopRule,compute_qgt,sampler_info
 import optax
 from typing import Callable
 from functools import partial
 from jax.flatten_util import ravel_pytree
 import time
-from collections import Counter
-import numpy as np
-K=2
-hi_ext = hi**K
+
+# ========== 你原有全局参数（直接复用） ==========
+# 单系统希尔伯特空间
+hi = nk.hilbert.SpinOrbitalFermions(
+    n_orbitals=2,
+    s=1/2,
+    n_fermions_per_spin=(1,1),
+)
+K = 2  # NES 扩展副本数
+hi_ext = hi ** K  # 扩展希尔伯特空间
+SINGLE_SIZE = hi.size  # 单个子系统维度 = 4
+single_edges = ((0, 1), (2, 3))  # 费米子跃迁边
+g = nk.graph.Graph(edges=single_edges)
+single_rule = nk.sampler.rules.FermionHopRule(hi, graph=g)
+tensor_rule = nk.sampler.rules.TensorRule(hi_ext, [single_rule] * K)
+
+total_ansatz = NESTotalAnsatz(4,K,12,rngs=nnx.Rngs(11))
+total_machine, total_graphdef,total_params = create_machine(total_ansatz)
+total_matrix_machine, total_graphdef,total_params = create_machine_matrix(total_ansatz)
+
+single_machine_list = []
+for ansatz in total_ansatz.single_ansatz_list:
+    m, g, p = create_single_machine(ansatz)
+    single_machine_list.append(m)
 
 N_CHAINS = 16
 N_WARMUP = 100
@@ -856,16 +672,11 @@ print(f"训练耗时：{end_time - start_time:.2f} 秒")
 # 最终结果
 print("\n" + "="*60)
 print(f"训练完成!")
-# print(f"最终能量：{final_energy.real:.8f} ± {final_std:.6f} Ha")
-# print(f"FCI 基准：{E_fcis[0]:.8f} Ha")
-# print(f"绝对误差：{final_error:.6f} Ha")
-# print(f"相对误差：{final_error / jnp.abs(E_fcis[0]) * 100:.4f}%")
 print("="*60)
 
 ```
-输出是:
+输出的结果为:
 ```python
-
 ============================================================
 开始多链 NES-VMC 训练 (NetKet 自定义采样器 + 朴素梯度下降)
 ============================================================
@@ -890,11 +701,11 @@ log_Psi: mean=10.994+0.302j | min=9.058-2.065j | max=11.009+2.080j
 grad norm = 0.1187
 Step 199 | Loss: -1.5891390172196438|0st能量=-1.60155252 Ha| 1st能量=0.01241350 Ha
 #-----------------------------------------#
-...
+训练耗时：48.32 秒
 
 ============================================================
 训练完成!
 ============================================================
-Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
 
 ```
+你判断一下为什么运行结果会是这样？？
