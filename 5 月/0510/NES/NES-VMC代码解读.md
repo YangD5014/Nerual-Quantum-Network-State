@@ -809,7 +809,6 @@ for step in range(N_ITER):
     total_params = optax.apply_updates(total_params, updates)
     
     
-    
     log_Psi_batch = total_machine(total_params, samples.reshape(-1,K,4))
     eig_vals, eig_vecs = jnp.linalg.eigh(E_L_mean)
     grad_norm = jnp.linalg.norm(grad_flat)

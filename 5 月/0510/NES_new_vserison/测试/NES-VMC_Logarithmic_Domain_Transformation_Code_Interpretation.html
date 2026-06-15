@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NES-VMC Logarithmic Domain Transformation Code Interpretation</title>
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.8;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 60px;
+            background: #fff;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #e94560;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            font-size: 1.8em;
+            color: #1a1a2e;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 40px 0 20px 0;
+            padding-top: 20px;
+        }
+
+        h3 {
+            font-size: 1.3em;
+            color: #e94560;
+            margin: 25px 0 15px 0;
+        }
+
+        h4 {
+            font-size: 1.1em;
+            color: #555;
+            margin: 20px 0 10px 0;
+            font-weight: normal;
+            font-style: italic;
+        }
+
+        p {
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        ul, ol {
+            margin-left: 30px;
+            margin-bottom: 20px;
+        }
+
+        li {
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Courier New', monospace;
+            background: #e8e8e8;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #c7254e;
+            font-size: 0.95em;
+        }
+
+        pre {
+            background: #e8e8e8;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: #1a1a2e;
+        }
+
+        .highlight {
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 30px 0;
+        }
+
+        .key-point {
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(240, 240, 240, 0.5));
+            border-left: 4px solid #e94560;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .key-point p {
+            margin-bottom: 0;
+        }
+
+        .formula-block {
+            background: #e8e8e8;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            border-left: 5px solid #e94560;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .reference-list {
+            list-style: none;
+            margin-left: 0;
+            padding: 0;
+        }
+
+        .reference-list li {
+            margin-bottom: 10px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .reference-list li::before {
+            content: "•";
+            color: #e94560;
+            position: absolute;
+            left: 0;
+        }
+
+        .warning-icon {
+            color: #ff9800;
+            margin-right: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            h1 { font-size: 1.8em; }
+            h2 { font-size: 1.4em; }
+            pre { font-size: 0.75em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NES-VMC Logarithmic Domain Transformation Code Interpretation</h1>
+
+        <h2>1. Research Background</h2>
+        <p>In the NES-VMC (Natural Excited State Variational Monte Carlo) algorithm, when neural network training progresses to later stages, the wavefunction matrix $\Psi(\mathbf{x})$ elements may become very large or very small. This leads to <span class="highlight">numerical overflow</span> issues when computing the loss function.</p>
+
+        <p>This document provides a comparative analysis of the core differences between the <span class="highlight">before</span> (original version) and <span class="highlight">after</span> (logarithmic domain transformation version).</p>
+
+        <hr>
+
+        <h2>2. Core Modification Comparison</h2>
+
+        <h3>2.1 NESTotalAnsatz Model Output</h3>
+
+        <h4>Before Modification (Original Version)</h4>
+        <pre><code># File: NES_new_vserison/NES_VMC.py
+# Lines: 91-104
+
+def _forward_single(x_single):
+    x_single = x_single.reshape(self.K, self.n_spin)
+    L = jnp.zeros((self.K, self.K), dtype=complex)
+    for i in range(self.K):
+        for j in range(self.K):
+            L = L.at[i, j].set(
+                self.single_ansatz_list[j](x_single[i])
+            )
+    sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L))
+    log_Psi = log_abs_det + 1j * jnp.angle(sign)
+    return log_Psi, L  # Returns L directly, not stabilized</code></pre>
+
+        <h4>After Modification (Logarithmic Domain Version)</h4>
+        <pre><code># File: Logarithmic Domain NES/NES_VMC.py
+# Lines: 91-104
+
+def _forward_single(x_single):
+    x_single = x_single.reshape(self.K, self.n_spin)
+    L = jnp.zeros((self.K, self.K), dtype=complex)
+    for i in range(self.K):
+        for j in range(self.K):
+            L = L.at[i, j].set(
+                self.single_ansatz_list[j](x_single[i])
+            )
+    L_stable = L - L.max()  # Core modification: subtract row maximum
+    sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L_stable))
+    log_Psi_stable = log_abs_det + 1j * jnp.angle(sign)
+    return log_Psi_stable, L_stable, L.max()  # Returns stabilized L_stable and L.max()</code></pre>
+
+        <h4>Key Differences</h4>
+        <table>
+            <tr>
+                <th>Item</th>
+                <th>Before</th>
+                <th>After</th>
+            </tr>
+            <tr>
+                <td><code>L</code> matrix handling</td>
+                <td>Not stabilized</td>
+                <td>Stabilized: <code>L_stable = L - L.max()</code></td>
+            </tr>
+            <tr>
+                <td>Return values</td>
+                <td><code>(log_Psi, L)</code></td>
+                <td><code>(log_Psi_stable, L_stable, L.max())</code></td>
+            </tr>
+            <tr>
+                <td>Numerical stability</td>
+                <td>Risk of overflow</td>
+                <td>Numerically stable</td>
+            </tr>
+        </table>
+
+        <hr>
+
+        <h3>2.2 Loss Function Computation</h3>
+
+        <h4>Before Modification (Original Version)</h4>
+        <pre><code># File: NES_new_vserison/NES_VMC.py
+# Lines: 248-255
+
+def NES_loss_energy(ha, total_matrix_machine, single_machine_list, total_params, x):
+    log_M = total_matrix_machine(total_params, x)  # Get original L matrix
+    Psi_Matrix = jnp.exp(log_M)  # Direct exponentiation, may overflow
+    H_psi_x = Ham_Psi(ha, single_machine_list, total_params, x)
+    Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix, H_psi_x)
+    return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv</code></pre>
+
+        <h4>After Modification (Logarithmic Domain Version)</h4>
+        <pre><code># File: Logarithmic Domain NES/NES_VMC.py
+# Lines: 85-97
+
+def NES_loss_energy_stable(ha, total_matrix_machine, total_max_machine,
+                          single_machine_list, total_params, x):
+    L_stable = total_matrix_machine(total_params, x)  # Get stabilized L_stable
+    Psi_Matrix_stable = jnp.exp(L_stable)  # Stabilized exponentiation
+
+    M = jnp.log(Ham_Psi(ha, single_machine_list, total_params, x))  # Take log of H_psi
+    M_stable = M - total_max_machine(total_params, x).reshape(-1,1,1)  # Stabilization
+    HPsi_stable = jnp.exp(M_stable)  # Stabilized exponentiation
+
+    Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix_stable, HPsi_stable)
+    return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv</code></pre>
+
+        <h4>Key Differences</h4>
+        <table>
+            <tr>
+                <th>Step</th>
+                <th>Before</th>
+                <th>After</th>
+            </tr>
+            <tr>
+                <td><code>Psi_Matrix</code></td>
+                <td>Direct <code>exp(L)</code></td>
+                <td>Stabilized <code>exp(L_stable)</code></td>
+            </tr>
+            <tr>
+                <td><code>H_psi_x</code></td>
+                <td>Use raw values directly</td>
+                <td>Take <code>log(H_psi)</code> first, then subtract <code>L.max()</code></td>
+            </tr>
+            <tr>
+                <td><code>HPsi</code></td>
+                <td>Direct <code>H_psi_x</code></td>
+                <td>Stabilized <code>exp(M_stable)</code></td>
+            </tr>
+        </table>
+
+        <hr>
+
+        <h3>2.3 New <code>create_machine_max</code> Function</h3>
+
+        <h4>Before Modification</h4>
+        <p>Only two functions existed:</p>
+        <ul>
+            <li><code>create_machine</code>: returns <code>log_psi_total</code></li>
+            <li><code>create_machine_matrix</code>: returns <code>log_M_matrix</code></li>
+        </ul>
+
+        <h4>After Modification</h4>
+        <p>New <code>create_machine_max</code> function added:</p>
+        <pre><code># File: Logarithmic Domain NES/NES_VMC.py
+
+def create_machine_max(model: NESTotalAnsatz):
+    """Wraps Flax NNX model into NetKet-style machine function"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        m = nnx.merge(graphdef, params)
+        log_psi_total, log_M_matrix, L_max = m(sigma)  # Returns L.max()
+        return L_max
+
+    return machine, graphdef, state</code></pre>
+
+        <hr>
+
+        <h2>3. Mathematical Stability Analysis</h2>
+
+        <h3>3.1 Numerical Overflow Problem</h3>
+
+        <p>When <code>L</code> matrix elements are large (e.g., late training), <code>jnp.exp(L)</code> causes numerical overflow:</p>
+
+        <pre><code># Assuming L elements are 1000
+jnp.exp(1000)  # → inf (numerical overflow)
+
+# After modification: L_stable = L - L.max() = L - 1000 ≈ [0, -10, ...]
+jnp.exp(L_stable)  # → [1, 4.5e-5, ...] (numerically stable)</code></pre>
+
+        <h3>3.2 Physical Consistency of Logarithmic Domain Transformation</h3>
+
+        <p>The post-modification computation is equivalent to:</p>
+
+        <div class="formula-block" id="formula-main"></div>
+
+        <p>Where:</p>
+        <ul>
+            <li>$L_{\text{stable}} = \log(\Psi) - L_{\max}$</li>
+            <li>$M_{\text{stable}} = \log(\tilde{H}\Psi) - L_{\max}$</li>
+        </ul>
+
+        <p>This is consistent with the numerical stabilization scheme in Paper Section S8.</p>
+
+        <hr>
+
+        <h2>4. Reasonableness Analysis</h2>
+
+        <h3>✅ Reasonable Aspects</h3>
+
+        <ol>
+            <li><span class="highlight">Stability improvement</span>: Logarithmic domain transformation effectively avoids numerical overflow in <code>exp()</code> operations</li>
+            <li><span class="highlight">Mathematical equivalence</span>: After removing the common factor $e^{L_{\max}}$, the relative relationships in matrix inversion and determinant calculations remain unchanged</li>
+            <li><span class="highlight">Architecture compatibility</span>: The modification does not change the overall structure and sampler of <code>NESTotalAnsatz</code></li>
+        </ol>
+
+        <h3><span class="warning-icon">⚠️</span> Aspects to Note</h3>
+
+        <ol>
+            <li><span class="highlight">New <code>create_machine_max</code> introduced</span>: Requires additional computation and passing of <code>L.max()</code>, increasing code complexity</li>
+            <li><span class="highlight">Batch processing consistency</span>: <code>L.max()</code> needs correct reshaping to <code>(batch, 1, 1)</code> to match the shape of <code>M</code></li>
+            <li><span class="highlight">Training monitoring</span>: The value range of log_Psi will change (due to stabilization), requiring attention during monitoring</li>
+        </ol>
+
+        <hr>
+
+        <h2>5. Summary</h2>
+
+        <table>
+            <tr>
+                <th>Modification</th>
+                <th>Content</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><code>L_stable = L - L.max()</code></td>
+                <td>Matrix stabilization</td>
+                <td>Prevent exp() overflow</td>
+            </tr>
+            <tr>
+                <td><code>M_stable = M - L.max()</code></td>
+                <td>Hamiltonian matrix stabilization</td>
+                <td>Ensure numerical consistency with Psi_Matrix</td>
+            </tr>
+            <tr>
+                <td>New <code>create_machine_max</code></td>
+                <td>Returns <code>L.max()</code></td>
+                <td>Provide common factor for stabilization</td>
+            </tr>
+            <tr>
+                <td><code>NES_loss_energy_stable</code></td>
+                <td>New loss function</td>
+                <td>Perform matrix operations in logarithmic domain</td>
+            </tr>
+        </table>
+
+        <p>The modification improves numerical stability, which is particularly important for deep networks or long training scenarios, while maintaining mathematical equivalence with the original algorithm.</p>
+
+        <hr>
+
+        <h2>6. Reference Files</h2>
+
+        <ul class="reference-list">
+            <li>Original version: <code>/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/NES_new_vserison/NES_VMC.py</code></li>
+            <li>Modified version: <code>/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/对数域改造 NES/NES_VMC.py</code></li>
+            <li>Modification test: <code>/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/对数域改造 NES/NES_VMC对数域改造 K2.ipynb</code></li>
+        </ul>
+    </div>
+
+    <script>
+        // Render LaTeX formulas
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false}
+                ],
+                throwOnError: false
+            });
+        });
+
+        // Initialize specific LaTeX formulas
+        window.addEventListener('load', function() {
+            // Main formula
+            katex.render(
+                "\\Psi^{-1} \\tilde{H} \\Psi = \\exp\\left(L_{\\text{stable}}\\right)^{-1} \\cdot \\exp\\left(M_{\\text{stable}}\\right)",
+                document.getElementById("formula-main"),
+                { throwOnError: false, displayMode: true }
+            );
+        });
+    </script>
+</body>
+</html>

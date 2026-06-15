@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NES-VMC 対数領域変換 コード解説</title>
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Yu Gothic', 'Meiryo', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.8;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 60px;
+            background: #fff;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #e94560;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            font-size: 1.8em;
+            color: #1a1a2e;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 40px 0 20px 0;
+            padding-top: 20px;
+        }
+
+        h3 {
+            font-size: 1.3em;
+            color: #e94560;
+            margin: 25px 0 15px 0;
+        }
+
+        h4 {
+            font-size: 1.1em;
+            color: #555;
+            margin: 20px 0 10px 0;
+            font-weight: normal;
+            font-style: italic;
+        }
+
+        p {
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        ul, ol {
+            margin-left: 30px;
+            margin-bottom: 20px;
+        }
+
+        li {
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Courier New', monospace;
+            background: #e8e8e8;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #c7254e;
+            font-size: 0.95em;
+        }
+
+        pre {
+            background: #e8e8e8;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: #1a1a2e;
+        }
+
+        .highlight {
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 30px 0;
+        }
+
+        .key-point {
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(240, 240, 240, 0.5));
+            border-left: 4px solid #e94560;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .key-point p {
+            margin-bottom: 0;
+        }
+
+        .formula-block {
+            background: #e8e8e8;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            border-left: 5px solid #e94560;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        .reference-list {
+            list-style: none;
+            margin-left: 0;
+            padding: 0;
+        }
+
+        .reference-list li {
+            margin-bottom: 10px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .reference-list li::before {
+            content: "•";
+            color: #e94560;
+            position: absolute;
+            left: 0;
+        }
+
+        .checkbox-item {
+            list-style: none;
+            margin-left: -20px;
+            padding-left: 25px;
+            position: relative;
+            margin-bottom: 12px;
+        }
+
+        .checkbox-item::before {
+            content: "☐";
+            color: #e94560;
+            position: absolute;
+            left: 0;
+        }
+
+        .warning-icon {
+            color: #ff9800;
+            margin-right: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            h1 { font-size: 1.8em; }
+            h2 { font-size: 1.4em; }
+            pre { font-size: 0.75em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NES-VMC 対数領域変換 コード解説</h1>
+
+        <h2>1. 研究背景</h2>
+        <p>NES-VMC（Natural Excited State Variational Monte Carlo）アルゴリズムにおいて、ニューラルネットワークのトレーニングが後期段階になると、波動関数行列 $\Psi(\mathbf{x})$ の要素が非常に大き거나非常に小さくなる可能性があります。これにより、損失関数の計算時に<span class="highlight">数値オーバーフロー</span>問題が発生します。</p>
+
+        <p>本文書では、<span class="highlight">改造前</span>（オリジナルバージョン）と<span class="highlight">改造後</span>（対数領域変換バージョン）のコアな違いを比較分析します。</p>
+
+        <hr>
+
+        <h2>2. コア改造点の比較</h2>
+
+        <h3>2.1 NESTotalAnsatz のモデル出力</h3>
+
+        <h4>改造前（オリジナルバージョン）</h4>
+        <pre><code># ファイル：NES_new_vserison/NES_VMC.py
+# 行番号：91-104
+
+def _forward_single(x_single):
+    x_single = x_single.reshape(self.K, self.n_spin)
+    L = jnp.zeros((self.K, self.K), dtype=complex)
+    for i in range(self.K):
+        for j in range(self.K):
+            L = L.at[i, j].set(
+                self.single_ansatz_list[j](x_single[i])
+            )
+    sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L))
+    log_Psi = log_abs_det + 1j * jnp.angle(sign)
+    return log_Psi, L  # L を直接返す、安定化なし</code></pre>
+
+        <h4>改造後（対数領域変換バージョン）</h4>
+        <pre><code># ファイル：対数領域変換 NES/NES_VMC.py
+# 行番号：91-104
+
+def _forward_single(x_single):
+    x_single = x_single.reshape(self.K, self.n_spin)
+    L = jnp.zeros((self.K, self.K), dtype=complex)
+    for i in range(self.K):
+        for j in range(self.K):
+            L = L.at[i, j].set(
+                self.single_ansatz_list[j](x_single[i])
+            )
+    L_stable = L - L.max()  # コア改造：行の最大値を減算
+    sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L_stable))
+    log_Psi_stable = log_abs_det + 1j * jnp.angle(sign)
+    return log_Psi_stable, L_stable, L.max()  # 安定化後の L_stable と L.max() を返す</code></pre>
+
+        <h4>主な違い</h4>
+        <table>
+            <tr>
+                <th>項目</th>
+                <th>改造前</th>
+                <th>改造後</th>
+            </tr>
+            <tr>
+                <td><code>L</code> 行列の処理</td>
+                <td>安定化なし</td>
+                <td>安定化：<code>L_stable = L - L.max()</code></td>
+            </tr>
+            <tr>
+                <td>戻り値</td>
+                <td><code>(log_Psi, L)</code></td>
+                <td><code>(log_Psi_stable, L_stable, L.max())</code></td>
+            </tr>
+            <tr>
+                <td>数値安定性</td>
+                <td>オーバーフローのリスクあり</td>
+                <td>数値的に安定</td>
+            </tr>
+        </table>
+
+        <hr>
+
+        <h3>2.2 損失関数の計算</h3>
+
+        <h4>改造前（オリジナルバージョン）</h4>
+        <pre><code># ファイル：NES_new_vserison/NES_VMC.py
+# 行番号：248-255
+
+def NES_loss_energy(ha, total_matrix_machine, single_machine_list, total_params, x):
+    log_M = total_matrix_machine(total_params, x)  # 元の L 行列を取得
+    Psi_Matrix = jnp.exp(log_M)  # 直接指数演算、オーバーフローの可能性
+    H_psi_x = Ham_Psi(ha, single_machine_list, total_params, x)
+    Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix, H_psi_x)
+    return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv</code></pre>
+
+        <h4>改造後（対数領域変換バージョン）</h4>
+        <pre><code># ファイル：対数領域変換 NES/NES_VMC.py
+# 行番号：85-97
+
+def NES_loss_energy_stable(ha, total_matrix_machine, total_max_machine,
+                          single_machine_list, total_params, x):
+    L_stable = total_matrix_machine(total_params, x)  # 安定化後の L_stable を取得
+    Psi_Matrix_stable = jnp.exp(L_stable)  # 指数演算を安定化
+
+    M = jnp.log(Ham_Psi(ha, single_machine_list, total_params, x))  # H_psi の対数を取る
+    M_stable = M - total_max_machine(total_params, x).reshape(-1,1,1)  # 安定化
+    HPsi_stable = jnp.exp(M_stable)  # 指数演算を安定化
+
+    Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix_stable, HPsi_stable)
+    return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv</code></pre>
+
+        <h4>主な違い</h4>
+        <table>
+            <tr>
+                <th>手順</th>
+                <th>改造前</th>
+                <th>改造後</th>
+            </tr>
+            <tr>
+                <td><code>Psi_Matrix</code></td>
+                <td><code>exp(L)</code> を直接計算</td>
+                <td><code>exp(L_stable)</code> を安定化後に計算</td>
+            </tr>
+            <tr>
+                <td><code>H_psi_x</code></td>
+                <td>生値を直接使用</td>
+                <td>先に <code>log(H_psi)</code> を取り、次に <code>L.max()</code> を減算</td>
+            </tr>
+            <tr>
+                <td><code>HPsi</code></td>
+                <td><code>H_psi_x</code> を直接使用</td>
+                <td><code>exp(M_stable)</code> を安定化後に計算</td>
+            </tr>
+        </table>
+
+        <hr>
+
+        <h3>2.3 新規追加 <code>create_machine_max</code> 関数</h3>
+
+        <h4>改造前</h4>
+        <p>以下の2つの関数のみ存在：</p>
+        <ul>
+            <li><code>create_machine</code>：<code>log_psi_total</code> を返す</li>
+            <li><code>create_machine_matrix</code>：<code>log_M_matrix</code> を返す</li>
+        </ul>
+
+        <h4>改造後</h4>
+        <p>新規 <code>create_machine_max</code> 関数を追加：</p>
+        <pre><code># ファイル：対数領域変換 NES/NES_VMC.py
+
+def create_machine_max(model: NESTotalAnsatz):
+    """Flax NNX モデルを NetKet スタイルの machine 関数にラップ"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        m = nnx.merge(graphdef, params)
+        log_psi_total, log_M_matrix, L_max = m(sigma)  # L.max() を返す
+        return L_max
+
+    return machine, graphdef, state</code></pre>
+
+        <hr>
+
+        <h2>3. 数学的安定性分析</h2>
+
+        <h3>3.1 数値オーバーフロー問題</h3>
+
+        <p><code>L</code> 行列の要素が大きい場合（トレーニング後期など）、<code>jnp.exp(L)</code> は数値オーバーフローを起こします：</p>
+
+        <pre><code># L の要素が 1000 の場合
+jnp.exp(1000)  # → inf (数値オーバーフロー)
+
+# 改造後：L_stable = L - L.max() = L - 1000 ≈ [0, -10, ...]
+jnp.exp(L_stable)  # → [1, 4.5e-5, ...] (数値的に安定)</code></pre>
+
+        <h3>3.2 対数領域変換の物理的一貫性</h3>
+
+        <p>改造後の計算は以下の天一：</p>
+
+        <div class="formula-block" id="formula-main"></div>
+
+        <p>ここで：</p>
+        <ul>
+            <li>$L_{\text{stable}} = \log(\Psi) - L_{\max}$</li>
+            <li>$M_{\text{stable}} = \log(\tilde{H}\Psi) - L_{\max}$</li>
+        </ul>
+
+        <p>これは論文 S8 章の数値安定化スキームと一貫しています。</p>
+
+        <hr>
+
+        <h2>4. 妥当性分析</h2>
+
+        <h3>✅ 妥当な点</h3>
+
+        <ol>
+            <li><span class="highlight">安定性の向上</span>：対数領域変換により <code>exp()</code> 操作の数値オーバーフローを効果的に回避</li>
+            <li><span class="highlight">数学的同値性</span>：共通因子 $e^{L_{\max}}$ 除去後、行列逆演算と行列式計算の相対関係は変化しない</li>
+            <li><span class="highlight">既存アーキテクチャとの互換性</span>：改造は <code>NESTotalAnsatz</code> の全体構造とサンプラーを変更しない</li>
+        </ol>
+
+        <h3><span class="warning-icon">⚠️</span> 注意が必要な点</h3>
+
+        <ol>
+            <li><span class="highlight">新規 <code>create_machine_max</code> の導入</span>：<code>L.max()</code> の追加計算と受け渡しがいるため、コード複雑度が増加</li>
+            <li><span class="highlight">バッチ処理の一貫性</span>：<code>L.max()</code> は <code>M</code> の形状に一致するように <code>(batch, 1, 1)</code> に正しくリサイズが必要</li>
+            <li><span class="highlight">トレーニング監視</span>：log_Psi の値範囲が（安定化により）変化するため、監視時に注意が必要</li>
+        </ol>
+
+        <hr>
+
+        <h2>5. まとめ</h2>
+
+        <table>
+            <tr>
+                <th>改造項目</th>
+                <th>改造内容</th>
+                <th>目的</th>
+            </tr>
+            <tr>
+                <td><code>L_stable = L - L.max()</code></td>
+                <td>行列安定化</td>
+                <td>exp() オーバーフローを防止</td>
+            </tr>
+            <tr>
+                <td><code>M_stable = M - L.max()</code></td>
+                <td>Hamiltonian 行列安定化</td>
+                <td>Psi_Matrix との数値的一貫性を確保</td>
+            </tr>
+            <tr>
+                <td>新規 <code>create_machine_max</code></td>
+                <td><code>L.max()</code> を返す</td>
+                <td>安定化に必要な共通因子を提供</td>
+            </tr>
+            <tr>
+                <td><code>NES_loss_energy_stable</code></td>
+                <td>新規損失関数</td>
+                <td>対数領域で行列演算を実行</td>
+            </tr>
+        </table>
+
+        <p>改造は数値安定性を向上させ、深層ネットワークや長期トレーニングシナリオにおいて特に重要でありながら、元のアルゴリズムとの数学的同値性を維持しています。</p>
+
+        <hr>
+
+        <h2>6. 参照ファイル</h2>
+
+        <ul class="reference-list">
+            <li>オリジナルバージョン：<code>/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/NES_new_vserison/NES_VMC.py</code></li>
+            <li>改造バージョン：<code>/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/对数域改造 NES/NES_VMC.py</code></li>
+            <li>改造テスト：<code>/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/对数域改造 NES/NES_VMC对数域改造 K2.ipynb</code></li>
+        </ul>
+    </div>
+
+    <script>
+        // Render LaTeX formulas
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false}
+                ],
+                throwOnError: false
+            });
+        });
+
+        // Initialize specific LaTeX formulas
+        window.addEventListener('load', function() {
+            // Main formula
+            katex.render(
+                "\\Psi^{-1} \\tilde{H} \\Psi = \\exp\\left(L_{\\text{stable}}\\right)^{-1} \\cdot \\exp\\left(M_{\\text{stable}}\\right)",
+                document.getElementById("formula-main"),
+                { throwOnError: false, displayMode: true }
+            );
+        });
+    </script>
+</body>
+</html>

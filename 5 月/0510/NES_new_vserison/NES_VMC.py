@@ -50,9 +50,9 @@ hi = nkx.hilbert.SpinOrbitalFermions(
     s=1/2,
     n_fermions_per_spin=(1,1),
 )
-K=2
-hi_ext = hi**K
-edges = [(0, 1), (2, 3),(4, 5),(6,7)]
+#K=3
+# hi_ext = hi**K
+# edges = [(0, 1), (2, 3),(4, 5),(6,7)]
 
 class SingleStateAnsatz(nnx.Module):
     """单态 Ansatz：适配费米子系统的复数值 FFNN"""
@@ -99,7 +99,6 @@ class NESTotalAnsatz(nnx.Module):
                     L = L.at[i, j].set(
                         self.single_ansatz_list[j](x_single[i])
                     )
-                    
             sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L))
             log_Psi = log_abs_det + 1j * jnp.angle(sign)
             return log_Psi, L  
@@ -600,19 +599,35 @@ def compute_qgt(machine, params, sigma, diag_shift=0.1):
     
     return qgt_reg, unravel_fn
 
+def sampler_info(samples:jnp.array,K:int):
+    test_samples = np.array(samples.reshape(-1, 4*K))
+    count = Counter(tuple(each_row.tolist()) for each_row in test_samples)
+    for tpl, count_ in count.items():
+        print(f"元组 {tpl} 出现了 {count_} 次")
+    return count
+
+import jax
+import jax.numpy as jnp
+import netket as nk
+
 SINGLE_SIZE = hi.size
+
 @nk.utils.struct.dataclass
 class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
-    # 【仅保留edges：JAX只允许存jax数组，彻底删除hi_ext！】
     edges: jnp.ndarray
+    K: int = nk.utils.struct.static_field()
+    single_size: int = nk.utils.struct.static_field()
 
     def _check_duplicate(self, sigma_ext):
-        """NES约束：子组态不重复（直接用全局K和SINGLE_SIZE，完全安全）"""
-        sub = sigma_ext.reshape((*sigma_ext.shape[:-1], K, SINGLE_SIZE))
-        return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1)
+        """NES约束：子组态不重复
+        🔥 核心修复：返回【标量布尔值】，匹配while_loop初始值形状
+        """
+        sub = sigma_ext.reshape((-1, self.K, self.single_size))
+        # 原代码返回数组 → 改为 .squeeze() 压缩成标量！
+        return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1).squeeze()
 
     def transition(self, sampler, machine, parameters, state, rng, sigma):
-        """跃迁规则（无修改）"""
+        """跃迁规则（完全不变）"""
         batch_size = sigma.shape[0]
         key1, key2 = jax.random.split(rng)
 
@@ -629,23 +644,23 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
         return new_sigma, None
 
     def random_state(self, sampler, machine, parameters, state, rng):
-        """【核心修复】用 sampler.hilbert 替代自定义hi_ext（NetKet标准写法，永不报错）"""
+        """随机态生成（仅修复标量形状）"""
         sigma_shape = state.σ.shape
-        # 直接从采样器获取希尔伯特空间（官方标准用法，100%兼容JAX）
         hilbert = sampler.hilbert
 
         def gen_single(key):
-            max_tries = 100  # 防死循环
+            max_tries = 100
             def cond(c): 
                 return (c[0] < max_tries) & c[2]
             
             def body(c):
                 tries, k, _, _ = c
-                k, k_new = jax.random.split(k)  # 每次更新RNG，防死循环
+                k, k_new = jax.random.split(k)
                 s = hilbert.random_state(k_new)
-                is_dup = self._check_duplicate(s)
+                is_dup = self._check_duplicate(s)  # 现在是标量！
                 return (tries + 1, k, is_dup, s)
             
+            # 初始值 c[2] = True（标量布尔值），和body返回值形状完全匹配
             init_c = (0, key, True, hilbert.random_state(key))
             final_c = jax.lax.while_loop(cond, body, init_c)
             tries, _, is_dup, s = final_c
@@ -653,16 +668,8 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
         
         keys = jax.random.split(rng, sigma_shape[0])
         return jax.vmap(gen_single)(keys)
-    
 
-def sampler_info(samples:jnp.array,K:int):
-    test_samples = np.array(samples.reshape(-1, 4*K))
-    count = Counter(tuple(each_row.tolist()) for each_row in test_samples)
-    for tpl, count_ in count.items():
-        print(f"元组 {tpl} 出现了 {count_} 次")
-    return count
 
-    
 import time
 # ======================
 # 超参数

@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NES-VMC Algorithm - NetKet Implementation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .slide-container {
+            width: 100%;
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        .slide {
+            min-height: 100vh;
+            width: 100%;
+            padding: 60px 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            scroll-snap-align: start;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+            border-bottom: 3px solid #ddd;
+        }
+
+        .slide:nth-child(even) {
+            background: linear-gradient(135deg, #f0f0f0 0%, #ffffff 100%);
+        }
+
+        .slide-number {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            font-size: 14px;
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        h1 {
+            font-size: 3em;
+            color: #333;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            font-size: 2.2em;
+            color: #1a1a2e;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 25px;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: #e94560;
+            margin: 20px 0 15px 0;
+        }
+
+        p {
+            font-size: 1.3em;
+            line-height: 1.8;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        ul {
+            margin-left: 40px;
+            margin-bottom: 20px;
+        }
+
+        li {
+            font-size: 1.2em;
+            line-height: 1.8;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        .formula {
+            background: #e8e8e8;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: 'Times New Roman', serif;
+            font-size: 1.3em;
+            text-align: center;
+            border-left: 5px solid #e94560;
+            color: #333;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Courier New', monospace;
+            background: #e8e8e8;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #c7254e;
+        }
+
+        pre {
+            background: #e8e8e8;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: #1a1a2e;
+        }
+
+        .highlight {
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 20px;
+        }
+
+        .column {
+            background: rgba(15, 52, 96, 0.3);
+            padding: 25px;
+            border-radius: 10px;
+            border: 1px solid #1b263b;
+        }
+
+        .column h3 {
+            margin-top: 0;
+        }
+
+        .nav-bar {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .nav-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ddd;
+            border: 2px solid #e94560;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .nav-dot:hover, .nav-dot.active {
+            background: #e94560;
+            transform: scale(1.2);
+        }
+
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            z-index: 1001;
+            transition: width 0.3s;
+        }
+
+        .slide-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .key-point {
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(240, 240, 240, 0.5));
+            border-left: 4px solid #e94560;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .output-block {
+            background: #e8e8e8;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+            color: #1a1a2e;
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                padding: 30px 20px;
+            }
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.5em; }
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+            pre { font-size: 0.75em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="progress-bar" id="progressBar"></div>
+
+    <div class="nav-bar" id="navBar"></div>
+
+    <div class="slide-container" id="slideContainer">
+
+        <!-- Slide 1: Title -->
+        <div class="slide" id="slide-1">
+            <div class="slide-content">
+                <h1>NES-VMC Algorithm Reproduction</h1>
+                <h2>Using NetKet Official API</h2>
+                <p style="font-size: 1.5em; margin-top: 40px; color: #aaa;">Natural Excited State Variational Monte Carlo</p>
+                <p style="margin-top: 60px; color: #666;">For Quantum Many-Body Systems (H₂ Molecule)</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: Research Objectives -->
+        <div class="slide" id="slide-2">
+            <h2>1. Research Objectives</h2>
+            <div class="slide-content">
+                <div class="key-point">
+                    <h3>Goal</h3>
+                    <p>Implement the <span class="highlight">NES-VMC (Natural Excited State Variational Monte Carlo)</span> algorithm using NetKet framework and Flax.nnx APIs to compute the first K excited state energies of quantum many-body systems.</p>
+                </div>
+
+                <h3>Requirements</h3>
+                <ul>
+                    <li>Use NetKet's built-in extended Hilbert space <code>hi ** K</code></li>
+                    <li>Diagonalize the averaged local energy matrix to obtain ground and excited state energies</li>
+                </ul>
+
+                <div class="formula">
+                    H₂ Molecule: bond_length = 1.4, basis = STO-3G
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Problem Background -->
+        <div class="slide" id="slide-3">
+            <h2>2.1 Problem Background</h2>
+            <div class="slide-content">
+                <p>In quantum mechanics, we need to solve the eigenvalue problem of Hamiltonian operator <span class="highlight">Ĥ</span>, finding the lowest K eigenfunctions.</p>
+
+                <div class="key-point">
+                    <h3>Challenge</h3>
+                    <p>For quantum many-body systems, direct diagonalization of the Hamiltonian matrix is usually <span class="highlight">infeasible</span> because the Hilbert space dimension grows exponentially with particle number.</p>
+                </div>
+
+                <h3>NES-VMC Solution</h3>
+                <p>NES-VMC equivalently transforms the problem of finding the first K excited states into a <span class="highlight">ground state problem</span> of an "extended system".</p>
+            </div>
+        </div>
+
+        <!-- Slide 4: Extended Hilbert Space -->
+        <div class="slide" id="slide-4">
+            <h2>2.2 Extended Hilbert Space</h2>
+            <div class="slide-content">
+                <p>Let <span class="highlight">X = (x₁, ..., x_N)</span> represent a set of N particles, where xᵢ denotes the state of the i-th particle.</p>
+
+                <div class="formula">
+                    Extended Hilbert Space = K copies of original system via tensor product<br>
+                    Each configuration: <strong>x = (x¹, ..., x^K)</strong>
+                </div>
+
+                <h3>H₂ Molecule Configuration</h3>
+                <ul>
+                    <li>Spin order: [α₁, α₂, β₁, β₂]</li>
+                    <li>4 legal configurations under particle/spin conservation</li>
+                    <li>Hilbert space dimension: Nₛ = 4</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 5: SingleStateAnsatz -->
+        <div class="slide" id="slide-5">
+            <h2>2.3 SingleStateAnsatz Structure</h2>
+            <div class="slide-content">
+                <p>ψ(x) corresponds to the Ansatz in ordinary VMC algorithm, outputting <span class="highlight">ln(ψ(x))</span> in complex values.</p>
+
+                <pre><code>class SingleStateAnsatz(nnx.Module):
+    def __init__(self, n_spin_orbitals: int, hidden_dim: int = 16, *, rngs: nnx.Rngs):
+        super().__init__()
+        self.n_spin_orbitals = n_spin_orbitals
+        self.linear1 = nnx.Linear(n_spin_orbitals, hidden_dim, rngs=rngs, param_dtype=complex)
+        self.linear2 = nnx.Linear(hidden_dim, hidden_dim, rngs=rngs, param_dtype=complex)
+        self.output = nnx.Linear(hidden_dim, 1, rngs=rngs, param_dtype=complex)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        h = nnx.tanh(self.linear1(x))
+        h = nnx.tanh(self.linear2(h))
+        out = self.output(h)
+        return jnp.squeeze(out)</code></pre>
+
+                <div class="key-point">
+                    <p>Model parameters are <span class="highlight">complex-valued</span> by default, output is log-domain: ln(ψ(x))</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: TotalAnsatz -->
+        <div class="slide" id="slide-6">
+            <h2>2.4 TotalAnsatz Structure</h2>
+            <div class="slide-content">
+                <p>Let ψᵢ denote the i-th N-particle wave function. The <span class="highlight">TotalAnsatz</span> is defined as the determinant:</p>
+
+                <div class="formula">
+                    Ψ(x) ≡ det| ψ₁(x¹) ψ₂(x¹) ... ψₖ(x¹) |<br>
+                    | ψ₁(x²) ψ₂(x²) ... ψₖ(x²) |<br>
+                    | ⋮ ⋮ ⋱ ⋮ |<br>
+                    | ψ₁(x^K) ψ₂(x^K) ... ψₖ(x^K) |
+                </div>
+
+                <div class="key-point">
+                    <h3>Key Property</h3>
+                    <p>The determinant structure <span class="highlight">prevents different Ansatze from collapsing to the same state</span> without explicitly requiring them to be orthogonal.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Log-Domain Transformation -->
+        <div class="slide" id="slide-7">
+            <h2>2.5 Log-Domain Transformation</h2>
+            <div class="slide-content">
+                <p>For stable computation (per paper Section S8):</p>
+
+                <div class="formula">
+                    ln Ψ(X) = ln det(M) = ln det| ψ₁(x¹) ... ψₖ(x¹) |<br>
+                    ⋮<br>
+                    | ψ₁(x^K) ... ψₖ(x^K) |
+                </div>
+
+                <h3>NESTotalAnsatz Implementation</h3>
+                <pre><code>def _forward_single(x_single):
+    x_single = x_single.reshape(self.K, self.n_spin)
+    L = jnp.zeros((self.K, self.K), dtype=complex)
+    for i in range(self.K):
+        for j in range(self.K):
+            L = L.at[i, j].set(self.single_ansatz_list[j](x_single[i]))
+    L_stable = L - L.max()
+    sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L_stable))
+    log_Psi_stable = log_abs_det + 1j * jnp.angle(sign)
+    return log_Psi_stable, L_stable, L.max()</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 8: Extended Hamiltonian -->
+        <div class="slide" id="slide-8">
+            <h2>2.6 Extended Hamiltonian</h2>
+            <div class="slide-content">
+                <p>Define the extended Hamiltonian:</p>
+
+                <div class="formula">
+                    H̃ = Ĥ₁ ⊕ Ĥ₂ ⊕ ... ⊕ Ĥₖ
+                </div>
+
+                <p>Where Ĥᵢ acts only on the i-th particle set.</p>
+
+                <div class="key-point">
+                    <h3>Key Insight</h3>
+                    <p>The ground state energy of H̃ equals the <span class="highlight">sum of the lowest K energies</span> of the original system Ĥ, with ground state wave function Ψ*.</p>
+                </div>
+
+                <p>Using trace form equivalence:</p>
+                <div class="formula">
+                    Ψ⁻¹(x) H̃ Ψ(x) = Tr[Ψ⁻¹(x) Ĥ Ψ(x)]
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Ham_psi and Ham_Psi -->
+        <div class="slide" id="slide-9">
+            <h2>2.7 Ham_psi and Ham_Psi Functions</h2>
+            <div class="slide-content">
+                <div class="two-column">
+                    <div class="column">
+                        <h3>Ham_psi</h3>
+                        <p>Computes Ĥψ₁(x¹)</p>
+                        <pre><code>def Ham_psi(ha, single_machine, params, x):
+    is_single = (x.ndim == 1)
+    if is_single:
+        x = x[None, :]
+
+    def _single_hpsi(x_single):
+        x_primes, mels = ha.get_conn_padded(x_single)
+        log_psi_vals = single_machine(params, x_primes)
+        psi_vals = jnp.exp(log_psi_vals)
+        return jnp.sum(mels * psi_vals)
+
+    H_psi_batch = jax.vmap(_single_hpsi)(x)
+    return H_psi_batch[0] if is_single else H_psi_batch</code></pre>
+                    </div>
+                    <div class="column">
+                        <h3>Ham_Psi</h3>
+                        <p>Computes ĤΨ(x)</p>
+                        <pre><code>def Ham_Psi(ha, single_machine_list, total_params, x):
+    K = len(single_machine_list)
+    if x.ndim == 2:
+        def _single_HamPsi(x_single):
+            HPsi = jnp.zeros((K, K), dtype=complex)
+            for i in range(K):
+                for j in range(K):
+                    val = Ham_psi(ha, single_machine_list[j],
+                                  total_params['single_ansatz_list'][j],
+                                  x_single[i])
+                    HPsi = HPsi.at[i, j].set(val)
+            return HPsi
+        return _single_HamPsi(x)</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Sampler Configuration -->
+        <div class="slide" id="slide-10">
+            <h2>2.8 Sampler Configuration</h2>
+            <div class="slide-content">
+                <p>The sampler operates on the <span class="highlight">extended Hilbert space</span>, sampling K configurations at once.</p>
+
+                <pre><code># Single system Hilbert space
+hi = nk.hilbert.SpinOrbitalFermions(
+    n_orbitals=2, s=1/2, n_fermions_per_spin=(1,1)
+)
+K = 2  # NES expansion copies
+hi_ext = hi ** K  # Extended Hilbert space
+
+# Create sampler with custom NES rule
+nes_rule = NESFermionHopRule(edges=ext_edges)
+nes_sampler = nk.sampler.MetropolisSampler(
+    hilbert=hi_ext, rule=nes_rule, n_chains=16, sweep_size=20
+)</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 11: Core Constraint -->
+        <div class="slide" id="slide-11">
+            <h2>2.9 Core Constraint: No Duplicate Configurations</h2>
+            <div class="slide-content">
+                <div class="key-point">
+                    <h3>Key Constraint</h3>
+                    <p>Extended states must satisfy <span class="highlight">x^i ≠ x^j</span> (when i ≠ j). Otherwise, matrix Ψ(x) will have identical rows/columns, leading to zero determinant.</p>
+                </div>
+
+                <div class="formula">
+                    For K=2: Valid configurations = Nₛ² - Nₛ = 4² - 4 = 12<br>
+                    (NOT 4² = 16)
+                </div>
+
+                <h3>NESFermionHopRule Implementation</h3>
+                <pre><code>def _check_duplicate(self, sigma_ext):
+    sub = sigma_ext.reshape((*sigma_ext.shape[:-1], K, SINGLE_SIZE))
+    return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1)</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 12: Loss Function -->
+        <div class="slide" id="slide-12">
+            <h2>3. Loss Function</h2>
+            <div class="slide-content">
+                <h3>Objective Function (Rayleigh Quotient)</h3>
+                <div class="formula">
+                    L = ⟨Ψ|H̃|Ψ⟩ / ⟨Ψ|Ψ⟩
+                </div>
+
+                <p>Using matrix determinant lemma, rewritten in trace form:</p>
+                <div class="formula">
+                    L = Tr(S⁻¹Ĥ) = Tr(Ψ⁻¹H̃Ψ)
+                </div>
+
+                <h3>Local Energy Matrix</h3>
+                <div class="formula">
+                    E_L(x) ≡ Ψ⁻¹(x) Ĥ Ψ(x)
+                </div>
+
+                <p>Via Monte Carlo sampling:</p>
+                <div class="formula">
+                    L = E_{x~Ψ²}[Tr(Ψ⁻¹(x)ĤΨ(x))]
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 13: NES-VMC Gradient -->
+        <div class="slide" id="slide-13">
+            <h2>4. NES-VMC Gradient Formula</h2>
+            <div class="slide-content">
+                <p>Define log amplitude:</p>
+                <div class="formula">
+                    ln|Ψ(x)| = ln det(Ψ(x)) = Tr(log(Ψ(x)))
+                </div>
+
+                <div class="key-point">
+                    <h3>Gradient Formula</h3>
+                    <div class="formula">
+                        ∇_θ L = 2E_{x~Ψ²}[Tr((E_L(x) - Ē_L) ∇_θ ln Ψ(x))]
+                    </div>
+                </div>
+
+                <p>Where:</p>
+                <ul>
+                    <li>E_L(x) = Ψ⁻¹(x)ĤΨ(x) — local energy matrix</li>
+                    <li>Ē_L = E_{x'~Ψ²}[E_L(x')] — expectation of local energy matrix</li>
+                    <li>∇_θ ln Ψ(x) — log gradient of wave function matrix</li>
+                </ul>
+
+                <p class="highlight">When K=1, this reduces to standard VMC gradient formula.</p>
+            </div>
+        </div>
+
+        <!-- Slide 14: Gradient Implementation -->
+        <div class="slide" id="slide-14">
+            <h2>4.2 Gradient Implementation</h2>
+            <div class="slide-content">
+                <pre><code>def nes_vmc_gradient(ha, total_matrix_machine, total_machine,
+                     single_machine_list, total_params, x_batch):
+    # 1. Batch local energy matrix
+    loss_batch, E_L_batch = NES_loss_energy(
+        ha, total_matrix_machine, single_machine_list, total_params, x_batch
+    )
+    E_L_mean = jnp.mean(E_L_batch, axis=0)
+    E_L_centered = E_L_batch - E_L_mean
+    tr_centered = jnp.trace(E_L_centered, axis1=-2, axis2=-1)
+
+    # 2. Compute gradients
+    grad_logPsi = jax.grad(total_machine, argnums=0, holomorphic=True)
+    vmap_grad_logPsi = jax.vmap(grad_logPsi, in_axes=(None, 0))
+    dlogPsi_batch = vmap_grad_logPsi(total_params, x_batch)
+
+    # 3. Core weighted average
+    def weight_and_mean(grad_component):
+        weights = tr_centered.reshape((-1,) + (1,)*(grad_component.ndim - 1))
+        return jnp.mean(weights * jnp.conj(grad_component), axis=0)
+
+    grad = jax.tree.map(weight_and_mean, dlogPsi_batch)
+    loss_mean = loss_batch.mean()
+    return grad, loss_mean, E_L_mean</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 15: Excited State Extraction -->
+        <div class="slide" id="slide-15">
+            <h2>5. Excited State Energy Extraction</h2>
+            <div class="slide-content">
+                <p>After training, accumulate local energy matrices through extensive sampling:</p>
+
+                <div class="formula">
+                    Ē_L = E_{x~Ψ²}[E_L(x)]
+                </div>
+
+                <p>Then diagonalize:</p>
+                <div class="formula">
+                    Ē_L = UΛU⁻¹
+                </div>
+
+                <p>Where Λ = diag(E₁, E₂, ..., Eₖ) contains <span class="highlight">eigenvalues sorted by energy</span>.</p>
+
+                <div class="key-point">
+                    <h3>Physical Interpretation</h3>
+                    <p>When single-state Ansatz is linear combination of eigenfunctions ψᵢ = Σⱼ aᵢⱼ ψⱼ*:</p>
+                    <div class="formula">Ψ⁻¹ĤΨ = A⁻¹ΛA</div>
+                    <p>Diagonalization directly yields excited state energies E₁, E₂, ..., Eₖ.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 16: Test Case Setup -->
+        <div class="slide" id="slide-16">
+            <h2>6. Test Case: H₂ Molecule</h2>
+            <div class="slide-content">
+                <pre><code>import jax
+import jax.numpy as jnp
+import flax.nnx as nnx
+import netket as nk
+import netket.experimental as nkx
+import optax
+
+K = 2
+hi_ext = hi ** K
+
+# Initialize models
+total_ansatz = NESTotalAnsatz(4, K, 12, rngs=nnx.Rngs(11))
+total_machine, total_graphdef, total_params = create_machine(total_ansatz)
+total_matrix_machine, _, _ = create_machine_matrix(total_ansatz)
+
+single_machine_list = []
+for ansatz in total_ansatz.single_ansatz_list:
+    m, g, p = create_single_machine(ansatz)
+    single_machine_list.append(m)
+
+# Optimizer
+optimizer = optax.sgd(learning_rate=0.01)
+opt_state = optimizer.init(total_params)
+
+# Training parameters
+N_CHAINS = 16
+N_WARMUP = 100
+N_SAMPLES_PER_CHAIN = 200
+N_ITER = 200</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 17: Training Results -->
+        <div class="slide" id="slide-17">
+            <h2>6.1 Training Results</h2>
+            <div class="slide-content">
+                <h3>Reference Values (FCI Benchmark)</h3>
+                <div class="formula">
+                    E₀ = -1.01546825 Ha (Ground State)<br>
+                    E₁ = -0.87542794 Ha (1st Excited)<br>
+                    E₂ = -0.42938376 Ha (2nd Excited)
+                </div>
+
+                <h3>Training Output</h3>
+                <div class="output-block">
+============================================================<br>
+Starting Multi-chain NES-VMC Training<br>
+============================================================<br>
+Step   0 | Loss: -1.2576 | 0st: -0.9956 Ha | 1st: -0.2621 Ha<br>
+Step  50 | Loss: -1.5476 | 0st: -56.85 Ha | 1st: 55.31 Ha<br>
+Step 100 | Loss: -1.5937 | 0st: -0.9415 Ha | 1st: -0.6523 Ha<br>
+Step 150 | Loss: -1.5937 | 0st: -0.9415 Ha | 1st: -0.6523 Ha<br>
+Step 199 | Loss: -1.5891 | 0st: -1.6016 Ha | 1st: 0.0124 Ha<br>
+#-----------------------------------------#<br>
+Training complete!
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 18: Summary -->
+        <div class="slide" id="slide-18">
+            <h2>Summary</h2>
+            <div class="slide-content">
+                <div class="two-column">
+                    <div class="column">
+                        <h3>Key Components</h3>
+                        <ul>
+                            <li><span class="highlight">Extended Hilbert Space</span>: K copies via tensor product</li>
+                            <li><span class="highlight">SingleStateAnsatz</span>: Complex-valued FFNN</li>
+                            <li><span class="highlight">TotalAnsatz</span>: Determinant structure</li>
+                            <li><span class="highlight">NESFermionHopRule</span>: No duplicate constraint</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h3>Algorithm Flow</h3>
+                        <ul>
+                            <li>1. Sample in extended Hilbert space</li>
+                            <li>2. Compute local energy matrix</li>
+                            <li>3. Calculate gradient via trace formula</li>
+                            <li>4. Diagonalize to extract excited states</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="key-point" style="margin-top: 40px;">
+                    <h3>Advantage</h3>
+                    <p>NES-VMC transforms the excited state problem into a <span class="highlight">ground state problem</span>, avoiding explicit orthogonalization requirements.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 19: End -->
+        <div class="slide" id="slide-19">
+            <div class="slide-content" style="text-align: center;">
+                <h1 style="font-size: 4em;">Thank You</h1>
+                <p style="font-size: 1.5em; margin-top: 40px; color: #aaa;">NES-VMC Algorithm Implementation in NetKet</p>
+                <p style="margin-top: 20px; color: #666;">Questions?</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const container = document.getElementById('slideContainer');
+        const slides = document.querySelectorAll('.slide');
+        const progressBar = document.getElementById('progressBar');
+        const navBar = document.getElementById('navBar');
+
+        // Create navigation dots
+        slides.forEach((slide, index) => {
+            const dot = document.createElement('div');
+            dot.className = 'nav-dot';
+            dot.addEventListener('click', () => {
+                slide.scrollIntoView({ behavior: 'smooth' });
+            });
+            navBar.appendChild(dot);
+        });
+
+        const navDots = document.querySelectorAll('.nav-dot');
+
+        // Update progress bar and active dot on scroll
+        container.addEventListener('scroll', () => {
+            const scrollTop = container.scrollTop;
+            const scrollHeight = container.scrollHeight - container.clientHeight;
+            const progress = (scrollTop / scrollHeight) * 100;
+            progressBar.style.width = progress + '%';
+
+            // Find current slide
+            let currentSlide = 0;
+            slides.forEach((slide, index) => {
+                const rect = slide.getBoundingClientRect();
+                if (rect.top <= window.innerHeight / 2) {
+                    currentSlide = index;
+                }
+            });
+
+            navDots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const currentScroll = container.scrollTop;
+            const slideHeight = window.innerHeight;
+
+            if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+                e.preventDefault();
+                container.scrollTo({
+                    top: currentScroll + slideHeight,
+                    behavior: 'smooth'
+                });
+            } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                e.preventDefault();
+                container.scrollTo({
+                    top: currentScroll - slideHeight,
+                    behavior: 'smooth'
+                });
+            }
+        });
+
+        // Initialize first dot as active
+        navDots[0].classList.add('active');
+    </script>
+</body>
+</html>

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NES-VMC Algorithm - NetKet 実装</title>
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Yu Gothic', 'Meiryo', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .slide-container {
+            width: 100%;
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        .slide {
+            min-height: 100vh;
+            width: 100%;
+            padding: 60px 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            scroll-snap-align: start;
+            background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+            border-bottom: 3px solid #ddd;
+        }
+
+        .slide:nth-child(even) {
+            background: linear-gradient(135deg, #f0f0f0 0%, #ffffff 100%);
+        }
+
+        .slide-number {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            font-size: 14px;
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        h1 {
+            font-size: 3em;
+            color: #333;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            font-size: 2.2em;
+            color: #1a1a2e;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 25px;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: #e94560;
+            margin: 20px 0 15px 0;
+        }
+
+        p {
+            font-size: 1.3em;
+            line-height: 1.8;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        ul {
+            margin-left: 40px;
+            margin-bottom: 20px;
+        }
+
+        li {
+            font-size: 1.2em;
+            line-height: 1.8;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        .formula {
+            background: #e8e8e8;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: 'Times New Roman', serif;
+            font-size: 1.3em;
+            text-align: center;
+            border-left: 5px solid #e94560;
+            color: #333;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Courier New', monospace;
+            background: #e8e8e8;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #c7254e;
+        }
+
+        pre {
+            background: #e8e8e8;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: #1a1a2e;
+        }
+
+        .highlight {
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 20px;
+        }
+
+        .column {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 25px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .column h3 {
+            margin-top: 0;
+        }
+
+        .nav-bar {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .nav-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ddd;
+            border: 2px solid #e94560;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .nav-dot:hover, .nav-dot.active {
+            background: #e94560;
+            transform: scale(1.2);
+        }
+
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            z-index: 1001;
+            transition: width 0.3s;
+        }
+
+        .slide-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .key-point {
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.1), rgba(240, 240, 240, 0.5));
+            border-left: 4px solid #e94560;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .output-block {
+            background: #e8e8e8;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+            color: #1a1a2e;
+        }
+
+        .formula-latex {
+            background: #e8e8e8;
+            padding: 25px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            border-left: 5px solid #e94560;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                padding: 30px 20px;
+            }
+            h1 { font-size: 2em; }
+            h2 { font-size: 1.5em; }
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+            pre { font-size: 0.75em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="progress-bar" id="progressBar"></div>
+
+    <div class="nav-bar" id="navBar"></div>
+
+    <div class="slide-container" id="slideContainer">
+
+        <!-- Slide 1: Title -->
+        <div class="slide" id="slide-1">
+            <div class="slide-content">
+                <h1>NES-VMC アルゴリズム再現</h1>
+                <h2>NetKet 公式 API を使用</h2>
+                <p style="font-size: 1.5em; margin-top: 40px; color: #666;">Natural Excited State Variational Monte Carlo</p>
+                <p style="margin-top: 60px; color: #888;">量子多体系向け (H₂ 水素分子)</p>
+            </div>
+        </div>
+
+        <!-- Slide 2: Research Objectives -->
+        <div class="slide" id="slide-2">
+            <h2>1. 研究目的</h2>
+            <div class="slide-content">
+                <div class="key-point">
+                    <h3>目標</h3>
+                    <p>NetKet フレームワークと Flax.nnx API を使用して <span class="highlight">NES-VMC (Natural Excited State Variational Monte Carlo)</span> アルゴリズムを実装し、量子多体系の最初の K 個の励起状態エネルギーを計算します。</p>
+                </div>
+
+                <h3>要件</h3>
+                <ul>
+                    <li>NetKet の組み込み拡張ヒルベルト空間 <code>hi ** K</code> を使用</li>
+                    <li>平均局所エネルギーマトリクスを対角化して基底状態と励起状態のエネルギーを取得</li>
+                </ul>
+
+                <div class="formula-latex" id="formula-h2-config"></div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Problem Background -->
+        <div class="slide" id="slide-3">
+            <h2>2.1 問題の背景</h2>
+            <div class="slide-content">
+                <p>量子力学では、ハミルトニアン演算子 <span class="highlight">\(\hat{H}\)</span> の固有値問題を解き、最後の K 個の固有関数を求めます。</p>
+
+                <div class="key-point">
+                    <h3>課題</h3>
+                    <p>量子多体系では、ハミルトニアンマトリクスの直接対角化は、ヒルベルト空間の次元が粒子数とともに指数関数的に増加するため、通常は <span class="highlight">実行不可能</span> です。</p>
+                </div>
+
+                <h3>NES-VMC の解決策</h3>
+                <p>NES-VMC は、最初の K 個の励起状態を見つける問題を「拡張系」の <span class="highlight">基底状態問題</span> に等価変換します。</p>
+            </div>
+        </div>
+
+        <!-- Slide 4: Extended Hilbert Space -->
+        <div class="slide" id="slide-4">
+            <h2>2.2 拡張ヒルベルト空間</h2>
+            <div class="slide-content">
+                <p><span class="highlight">\(X = (x_1, ..., x_N)\)</span> を N 個の粒子の集合とし、\(x_i\) は i 番目の粒子的状態を表します。</p>
+
+                <div class="formula-latex" id="formula-extended-hilbert"></div>
+
+                <h3>H₂ 水素分子の構成</h3>
+                <ul>
+                    <li>スピン順序: \([\alpha_1, \alpha_2, \beta_1, \beta_2]\)</li>
+                    <li>粒子/スピン保存則の下での合法な構成: 4通り</li>
+                    <li>ヒルベルト空間の次元: \(N_s = 4\)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 5: SingleStateAnsatz -->
+        <div class="slide" id="slide-5">
+            <h2>2.3 SingleStateAnsatz 構造</h2>
+            <div class="slide-content">
+                <p>\(\psi(x)\) は通常の VMC アルゴリズムの Ansatz に対応し、複素数値で <span class="highlight">\(\ln(\psi(x))\)</span> を出力します。</p>
+
+                <pre><code>class SingleStateAnsatz(nnx.Module):
+    def __init__(self, n_spin_orbitals: int, hidden_dim: int = 16, *, rngs: nnx.Rngs):
+        super().__init__()
+        self.n_spin_orbitals = n_spin_orbitals
+        self.linear1 = nnx.Linear(n_spin_orbitals, hidden_dim, rngs=rngs, param_dtype=complex)
+        self.linear2 = nnx.Linear(hidden_dim, hidden_dim, rngs=rngs, param_dtype=complex)
+        self.output = nnx.Linear(hidden_dim, 1, rngs=rngs, param_dtype=complex)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        h = nnx.tanh(self.linear1(x))
+        h = nnx.tanh(self.linear2(h))
+        out = self.output(h)
+        return jnp.squeeze(out)</code></pre>
+
+                <div class="key-point">
+                    <p>モデルパラメータはデフォルトで <span class="highlight">複素数値</span> であり、出力は対数領域: \(\ln(\psi(x))\)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: TotalAnsatz -->
+        <div class="slide" id="slide-6">
+            <h2>2.4 TotalAnsatz 構造</h2>
+            <div class="slide-content">
+                <p>\(\psi_i\) を i 番目の N 粒子波動関数とします。<span class="highlight">TotalAnsatz</span> は行列式として定義されます:</p>
+
+                <div class="formula-latex" id="formula-total-ansatz"></div>
+
+                <div class="key-point">
+                    <h3>重要な性質</h3>
+                    <p>行列式構造により、異なる Ansatz が明示的に直交性を要求することなく <span class="highlight">同じ状態に崩壊するのを防止</span> します。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Log-Domain Transformation -->
+        <div class="slide" id="slide-7">
+            <h2>2.5 対数領域変換</h2>
+            <div class="slide-content">
+                <p>安定した計算のために (論文 Section S8 参照):</p>
+
+                <div class="formula-latex" id="formula-log-domain"></div>
+
+                <h3>NESTotalAnsatz 実装</h3>
+                <pre><code>def _forward_single(x_single):
+    x_single = x_single.reshape(self.K, self.n_spin)
+    L = jnp.zeros((self.K, self.K), dtype=complex)
+    for i in range(self.K):
+        for j in range(self.K):
+            L = L.at[i, j].set(self.single_ansatz_list[j](x_single[i]))
+    L_stable = L - L.max()
+    sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L_stable))
+    log_Psi_stable = log_abs_det + 1j * jnp.angle(sign)
+    return log_Psi_stable, L_stable, L.max()</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 8: Extended Hamiltonian -->
+        <div class="slide" id="slide-8">
+            <h2>2.6 拡張ハミルトニアン</h2>
+            <div class="slide-content">
+                <p>拡張ハミルトニアンを定義します:</p>
+
+                <div class="formula-latex" id="formula-extended-hamiltonian"></div>
+
+                <p>ここで \(\hat{H}_i\) は i 番目の粒子セットのみに作用します。</p>
+
+                <div class="key-point">
+                    <h3>主要な洞察</h3>
+                    <p>\(\tilde{H}\) の基底状態エネルギーは、基底状態波動関数 \(\Psi^*\) を持つ元の系 \(\hat{H}\) の <span class="highlight">最低 K 個のエネルギーの合計</span> に等しくなります。</p>
+                </div>
+
+                <p>トレース形式の同値性を使用して:</p>
+                <div class="formula-latex" id="formula-trace-equivalence"></div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Ham_psi and Ham_Psi -->
+        <div class="slide" id="slide-9">
+            <h2>2.7 Ham_psi と Ham_Psi 関数</h2>
+            <div class="slide-content">
+                <div class="two-column">
+                    <div class="column">
+                        <h3>Ham_psi</h3>
+                        <p>\(\hat{H}\psi_1(x^1)\) を計算</p>
+                        <pre><code>def Ham_psi(ha, single_machine, params, x):
+    is_single = (x.ndim == 1)
+    if is_single:
+        x = x[None, :]
+
+    def _single_hpsi(x_single):
+        x_primes, mels = ha.get_conn_padded(x_single)
+        log_psi_vals = single_machine(params, x_primes)
+        psi_vals = jnp.exp(log_psi_vals)
+        return jnp.sum(mels * psi_vals)
+
+    H_psi_batch = jax.vmap(_single_hpsi)(x)
+    return H_psi_batch[0] if is_single else H_psi_batch</code></pre>
+                    </div>
+                    <div class="column">
+                        <h3>Ham_Psi</h3>
+                        <p>\(\hat{H}\Psi(x)\) を計算</p>
+                        <pre><code>def Ham_Psi(ha, single_machine_list, total_params, x):
+    K = len(single_machine_list)
+    if x.ndim == 2:
+        def _single_HamPsi(x_single):
+            HPsi = jnp.zeros((K, K), dtype=complex)
+            for i in range(K):
+                for j in range(K):
+                    val = Ham_psi(ha, single_machine_list[j],
+                                  total_params['single_ansatz_list'][j],
+                                  x_single[i])
+                    HPsi = HPsi.at[i, j].set(val)
+            return HPsi
+        return _single_HamPsi(x)</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Sampler Configuration -->
+        <div class="slide" id="slide-10">
+            <h2>2.8 サンプラーの設定</h2>
+            <div class="slide-content">
+                <p>サンプラーは <span class="highlight">拡張ヒルベルト空間</span> で動作し、一度に K 個の構成をサンプリングします。</p>
+
+                <pre><code># Single system Hilbert space
+hi = nk.hilbert.SpinOrbitalFermions(
+    n_orbitals=2, s=1/2, n_fermions_per_spin=(1,1)
+)
+K = 2  # NES expansion copies
+hi_ext = hi ** K  # Extended Hilbert space
+
+# Create sampler with custom NES rule
+nes_rule = NESFermionHopRule(edges=ext_edges)
+nes_sampler = nk.sampler.MetropolisSampler(
+    hilbert=hi_ext, rule=nes_rule, n_chains=16, sweep_size=20
+)</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 11: Core Constraint -->
+        <div class="slide" id="slide-11">
+            <h2>2.9 コア制約: 重複構成の禁止</h2>
+            <div class="slide-content">
+                <div class="key-point">
+                    <h3>主要な制約</h3>
+                    <p>拡張状態は \(x^i \neq x^j\) (i \(\neq\) j のとき) を満たす必要があります。そうでない場合、行列 \(\Psi(x)\) は同一の行/列を持ち、行列式がゼロになります。</p>
+                </div>
+
+                <div class="formula-latex" id="formula-valid-configs"></div>
+
+                <h3>NESFermionHopRule 実装</h3>
+                <pre><code>def _check_duplicate(self, sigma_ext):
+    sub = sigma_ext.reshape((*sigma_ext.shape[:-1], K, SINGLE_SIZE))
+    return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1)</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 12: Loss Function -->
+        <div class="slide" id="slide-12">
+            <h2>3. 損失関数</h2>
+            <div class="slide-content">
+                <h3>目的関数 (レイリー商)</h3>
+                <div class="formula-latex" id="formula-loss"></div>
+
+                <p>行列行列式補題を使用して、トレース形式に書き直します:</p>
+                <div class="formula-latex" id="formula-loss-trace"></div>
+
+                <h3>局所エネルギーマトリクス</h3>
+                <div class="formula-latex" id="formula-local-energy"></div>
+
+                <p>モンテカルロサンプリングにより:</p>
+                <div class="formula-latex" id="formula-mc-sampling"></div>
+            </div>
+        </div>
+
+        <!-- Slide 13: NES-VMC Gradient -->
+        <div class="slide" id="slide-13">
+            <h2>4. NES-VMC 勾配公式</h2>
+            <div class="slide-content">
+                <p>対数振幅を定義します:</p>
+                <div class="formula-latex" id="formula-log-amplitude"></div>
+
+                <div class="key-point">
+                    <h3>勾配公式</h3>
+                    <div class="formula-latex" id="formula-gradient" style="background: transparent; border: none; padding: 10px;"></div>
+                </div>
+
+                <p>ここで:</p>
+                <ul>
+                    <li>\(E_L(x) = \Psi^{-1}(x)\hat{H}\Psi(x)\) — 局所エネルギーマトリクス</li>
+                    <li>\(\bar{E}_L = E_{x'\sim\Psi^2}[E_L(x')]\) — 局所エネルギーマトリクスの期待値</li>
+                    <li>\(\nabla_\theta \ln \Psi(x)\) — 波動関数マトリクスの対数勾配</li>
+                </ul>
+
+                <p class="highlight">K=1 のとき、これは標準的な VMC 勾配公式に帰着します。</p>
+            </div>
+        </div>
+
+        <!-- Slide 14: Gradient Implementation -->
+        <div class="slide" id="slide-14">
+            <h2>4.2 勾配の実装</h2>
+            <div class="slide-content">
+                <pre><code>def nes_vmc_gradient(ha, total_matrix_machine, total_machine,
+                     single_machine_list, total_params, x_batch):
+    # 1. Batch local energy matrix
+    loss_batch, E_L_batch = NES_loss_energy(
+        ha, total_matrix_machine, single_machine_list, total_params, x_batch
+    )
+    E_L_mean = jnp.mean(E_L_batch, axis=0)
+    E_L_centered = E_L_batch - E_L_mean
+    tr_centered = jnp.trace(E_L_centered, axis1=-2, axis2=-1)
+
+    # 2. Compute gradients
+    grad_logPsi = jax.grad(total_machine, argnums=0, holomorphic=True)
+    vmap_grad_logPsi = jax.vmap(grad_logPsi, in_axes=(None, 0))
+    dlogPsi_batch = vmap_grad_logPsi(total_params, x_batch)
+
+    # 3. Core weighted average
+    def weight_and_mean(grad_component):
+        weights = tr_centered.reshape((-1,) + (1,)*(grad_component.ndim - 1))
+        return jnp.mean(weights * jnp.conj(grad_component), axis=0)
+
+    grad = jax.tree.map(weight_and_mean, dlogPsi_batch)
+    loss_mean = loss_batch.mean()
+    return grad, loss_mean, E_L_mean</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 15: Excited State Extraction -->
+        <div class="slide" id="slide-15">
+            <h2>5. 励起状態エネルギーの抽出</h2>
+            <div class="slide-content">
+                <p>トレーニング後、広範なサンプリングを通じて局所エネルギーマトリクスを蓄積します:</p>
+
+                <div class="formula-latex" id="formula-elbar"></div>
+
+                <p>次に対角化します:</p>
+                <div class="formula-latex" id="formula-diagonalize"></div>
+
+                <p>ここで \(\Lambda = \text{diag}(E_1, E_2, ..., E_K)\) は <span class="highlight">エネルギー順にソートされた固有値</span> を含みます。</p>
+
+                <div class="key-point">
+                    <h3>物理的解釈</h3>
+                    <p>単一状態 Ansatz が固有関数の線形結合 \(\psi_i = \sum_j a_{ij} \psi_j^*\) の場合:</p>
+                    <div class="formula-latex" id="formula-physical-interp" style="background: transparent; border: none; padding: 10px;"></div>
+                    <p>対角化は励起状態エネルギー \(E_1, E_2, ..., E_K\) を直接生成します。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 16: Test Case Setup -->
+        <div class="slide" id="slide-16">
+            <h2>6. テストケース: H₂ 水素分子</h2>
+            <div class="slide-content">
+                <pre><code>import jax
+import jax.numpy as jnp
+import flax.nnx as nnx
+import netket as nk
+import netket.experimental as nkx
+import optax
+
+K = 2
+hi_ext = hi ** K
+
+# Initialize models
+total_ansatz = NESTotalAnsatz(4, K, 12, rngs=nnx.Rngs(11))
+total_machine, total_graphdef, total_params = create_machine(total_ansatz)
+total_matrix_machine, _, _ = create_machine_matrix(total_ansatz)
+
+single_machine_list = []
+for ansatz in total_ansatz.single_ansatz_list:
+    m, g, p = create_single_machine(ansatz)
+    single_machine_list.append(m)
+
+# Optimizer
+optimizer = optax.sgd(learning_rate=0.01)
+opt_state = optimizer.init(total_params)
+
+# Training parameters
+N_CHAINS = 16
+N_WARMUP = 100
+N_SAMPLES_PER_CHAIN = 200
+N_ITER = 200</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 17: Training Results -->
+        <div class="slide" id="slide-17">
+            <h2>6.1 トレーニング結果</h2>
+            <div class="slide-content">
+                <h3>参照値 (FCI ベンチマーク)</h3>
+                <div class="formula-latex" id="formula-fci-ref"></div>
+
+                <h3>トレーニング出力</h3>
+                <div class="output-block">
+============================================================<br>
+Starting Multi-chain NES-VMC Training<br>
+============================================================<br>
+Step   0 | Loss: -1.2576 | 0st: -0.9956 Ha | 1st: -0.2621 Ha<br>
+Step  50 | Loss: -1.5476 | 0st: -56.85 Ha | 1st: 55.31 Ha<br>
+Step 100 | Loss: -1.5937 | 0st: -0.9415 Ha | 1st: -0.6523 Ha<br>
+Step 150 | Loss: -1.5937 | 0st: -0.9415 Ha | 1st: -0.6523 Ha<br>
+Step 199 | Loss: -1.5891 | 0st: -1.6016 Ha | 1st: 0.0124 Ha<br>
+#-----------------------------------------#<br>
+Training complete!
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 18: Summary -->
+        <div class="slide" id="slide-18">
+            <h2>まとめ</h2>
+            <div class="slide-content">
+                <div class="two-column">
+                    <div class="column">
+                        <h3>主要なコンポーネント</h3>
+                        <ul>
+                            <li><span class="highlight">拡張ヒルベルト空間</span>: テンソル積による K 個のコピー</li>
+                            <li><span class="highlight">SingleStateAnsatz</span>: 複素数値 FFNN</li>
+                            <li><span class="highlight">TotalAnsatz</span>: 行列式構造</li>
+                            <li><span class="highlight">NESFermionHopRule</span>: 重複なし制約</li>
+                        </ul>
+                    </div>
+                    <div class="column">
+                        <h3>アルゴリズムの流れ</h3>
+                        <ul>
+                            <li>1. 拡張ヒルベルト空間でサンプリング</li>
+                            <li>2. 局所エネルギーマトリクスを計算</li>
+                            <li>3. トレース公式で勾配を計算</li>
+                            <li>4. 対角化して励起状態を抽出</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="key-point" style="margin-top: 40px;">
+                    <h3>利点</h3>
+                    <p>NES-VMC は励起状態問題を <span class="highlight">基底状態問題</span> に変換し、明示的な直交化要件を回避します。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 19: End -->
+        <div class="slide" id="slide-19">
+            <div class="slide-content" style="text-align: center;">
+                <h1 style="font-size: 4em;">ありがとう</h1>
+                <p style="font-size: 1.5em; margin-top: 40px; color: #666;">NetKet における NES-VMC アルゴリズム実装</p>
+                <p style="margin-top: 20px; color: #888;">質問はありますか？</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Render LaTeX formulas
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false}
+                ],
+                throwOnError: false
+            });
+        });
+
+        // Initialize LaTeX formulas
+        window.addEventListener('load', function() {
+            // H2 molecule config
+            katex.render(
+                "\\text{H}_2 \\text{分子}: \\ \\text{bond\\_length} = 1.4, \\ \\text{basis} = \\text{STO-3G}",
+                document.getElementById("formula-h2-config"),
+                { throwOnError: false }
+            );
+
+            // Extended Hilbert Space
+            katex.render(
+                "\\text{拡張ヒルベルト空間} = \\text{元の系の} K \\text{個のコピーのテンソル積} \\\\ " +
+                "\\text{各構成}: \\ \\mathbf{x} = (x^1, x^2, \\ldots, x^K)",
+                document.getElementById("formula-extended-hilbert"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // TotalAnsatz determinant
+            katex.render(
+                "\\Psi(\\mathbf{x}) \\equiv \\det \\begin{pmatrix} " +
+                "\\psi_1(x^1) & \\psi_2(x^1) & \\cdots & \\psi_K(x^1) \\\\ " +
+                "\\psi_1(x^2) & \\psi_2(x^2) & \\cdots & \\psi_K(x^2) \\\\ " +
+                "\\vdots & \\vdots & \\ddots & \\vdots \\\\ " +
+                "\\psi_1(x^K) & \\psi_2(x^K) & \\cdots & \\psi_K(x^K) " +
+                "\\end{pmatrix}",
+                document.getElementById("formula-total-ansatz"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Log domain transformation
+            katex.render(
+                "\\ln \\Psi(\\mathbf{X}) = \\ln \\det(M) = \\ln \\det \\begin{pmatrix} " +
+                "\\psi_1(\\mathbf{x}^1) & \\cdots & \\psi_K(\\mathbf{x}^1) \\\\ " +
+                "\\vdots & \\ddots & \\vdots \\\\ " +
+                "\\psi_1(\\mathbf{x}^K) & \\cdots & \\psi_K(\\mathbf{x}^K) " +
+                "\\end{pmatrix}",
+                document.getElementById("formula-log-domain"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Extended Hamiltonian
+            katex.render(
+                "\\tilde{H} = \\hat{H}_1 \\oplus \\hat{H}_2 \\oplus \\cdots \\oplus \\hat{H}_K",
+                document.getElementById("formula-extended-hamiltonian"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Trace equivalence
+            katex.render(
+                "\\Psi(\\mathbf{x})^{-1} \\hat{\\mathcal{H}} \\Psi(\\mathbf{x}) = \\mathrm{Tr}[\\Psi^{-1}(\\mathbf{x}) \\hat{H} \\Psi(\\mathbf{x})]",
+                document.getElementById("formula-trace-equivalence"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Valid configurations
+            katex.render(
+                "K=2 \\text{ の場合}: \\ \\text{合法な構成数} = N_s^2 - N_s = 4^2 - 4 = 12 \\quad (4^2 \\neq 16)",
+                document.getElementById("formula-valid-configs"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Loss function
+            katex.render(
+                "\\mathcal{L} = \\frac{\\langle \\Psi | \\tilde{H} | \\Psi \\rangle}{\\langle \\Psi | \\Psi \\rangle}",
+                document.getElementById("formula-loss"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Loss in trace form
+            katex.render(
+                "\\mathcal{L} = \\mathrm{Tr}(S^{-1}\\hat{H}) = \\mathrm{Tr}(\\Psi^{-1}\\tilde{H}\\Psi)",
+                document.getElementById("formula-loss-trace"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Local energy matrix
+            katex.render(
+                "E_L(\\mathbf{x}) \\equiv \\Psi^{-1}(\\mathbf{x}) \\hat{H} \\Psi(\\mathbf{x})",
+                document.getElementById("formula-local-energy"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Monte Carlo sampling
+            katex.render(
+                "\\mathcal{L} = \\mathbb{E}_{\\mathbf{x}\\sim\\Psi^2}[\\mathrm{Tr}(\\Psi^{-1}(\\mathbf{x})\\hat{H}\\Psi(\\mathbf{x}))]",
+                document.getElementById("formula-mc-sampling"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Log amplitude
+            katex.render(
+                "\\log|\\Psi(\\mathbf{x})| = \\log \\det(\\Psi(\\mathbf{x})) = \\mathrm{Tr}(\\log(\\Psi(\\mathbf{x})))",
+                document.getElementById("formula-log-amplitude"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Gradient formula
+            katex.render(
+                "\\nabla_\\theta \\mathcal{L} = 2 \\mathbb{E}_{\\mathbf{x}\\sim\\Psi^2}[\\mathrm{Tr}((E_L(\\mathbf{x}) - \\bar{E}_L) \\nabla_\\theta \\log \\Psi(\\mathbf{x}))]",
+                document.getElementById("formula-gradient"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // E_L bar
+            katex.render(
+                "\\bar{E}_L = \\mathbb{E}_{\\mathbf{x}\\sim\\Psi^2}[E_L(\\mathbf{x})]",
+                document.getElementById("formula-elbar"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Diagonalize
+            katex.render(
+                "\\bar{E}_L = U \\Lambda U^{-1}",
+                document.getElementById("formula-diagonalize"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // Physical interpretation
+            katex.render(
+                "\\Psi^{-1}\\hat{H}\\Psi = A^{-1}\\Lambda A",
+                document.getElementById("formula-physical-interp"),
+                { throwOnError: false, displayMode: true }
+            );
+
+            // FCI reference
+            katex.render(
+                "E_0 = -1.01546825 \\ \\text{Ha} \\ (\\text{基底状態}) \\\\ " +
+                "E_1 = -0.87542794 \\ \\text{Ha} \\ (\\text{第1励起}) \\\\ " +
+                "E_2 = -0.42938376 \\ \\text{Ha} \\ (\\text{第2励起})",
+                document.getElementById("formula-fci-ref"),
+                { throwOnError: false, displayMode: true }
+            );
+        });
+
+        const container = document.getElementById('slideContainer');
+        const slides = document.querySelectorAll('.slide');
+        const progressBar = document.getElementById('progressBar');
+        const navBar = document.getElementById('navBar');
+
+        // Create navigation dots
+        slides.forEach((slide, index) => {
+            const dot = document.createElement('div');
+            dot.className = 'nav-dot';
+            dot.addEventListener('click', () => {
+                slide.scrollIntoView({ behavior: 'smooth' });
+            });
+            navBar.appendChild(dot);
+        });
+
+        const navDots = document.querySelectorAll('.nav-dot');
+
+        // Update progress bar and active dot on scroll
+        container.addEventListener('scroll', () => {
+            const scrollTop = container.scrollTop;
+            const scrollHeight = container.scrollHeight - container.clientHeight;
+            const progress = (scrollTop / scrollHeight) * 100;
+            progressBar.style.width = progress + '%';
+
+            // Find current slide
+            let currentSlide = 0;
+            slides.forEach((slide, index) => {
+                const rect = slide.getBoundingClientRect();
+                if (rect.top <= window.innerHeight / 2) {
+                    currentSlide = index;
+                }
+            });
+
+            navDots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            const currentScroll = container.scrollTop;
+            const slideHeight = window.innerHeight;
+
+            if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+                e.preventDefault();
+                container.scrollTo({
+                    top: currentScroll + slideHeight,
+                    behavior: 'smooth'
+                });
+            } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                e.preventDefault();
+                container.scrollTo({
+                    top: currentScroll - slideHeight,
+                    behavior: 'smooth'
+                });
+            }
+        });
+
+        // Initialize first dot as active
+        navDots[0].classList.add('active');
+    </script>
+</body>
+</html>
