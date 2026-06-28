@@ -1,0 +1,616 @@
+"""
+NES-VMC (Natural Excited State Variational Monte Carlo) 算法实现
+
+本文件实现基于原生 JAX 和部分 NetKet 的 NES-VMC 算法，用于计算量子多体系统的激发态能量。
+"""
+import jax
+import jax.numpy as jnp
+import netket as nk
+import netket.experimental as nkx
+import numpy as np
+from pyscf import gto, scf, fci
+import flax.nnx as nnx
+import optax
+from functools import partial
+from jax import flatten_util
+import orbax.checkpoint as ocp
+from pathlib import Path
+from jax import jit, vmap, grad, value_and_grad
+import jax.numpy as jnp
+import jax
+import time
+from functools import partial
+from jax.flatten_util import ravel_pytree
+from collections import Counter
+
+# ==============================================================================
+# 1. 全局参数 & H₂ 分子定义
+# ==============================================================================
+# ===================== H₂ 分子定义 & FCI 基准 =====================
+bond_length = 1.4
+geometry = [('H', (0., 0., 0.)), ('H', (bond_length, 0., 0.))]
+mol = gto.M(atom=geometry, basis='STO-3G', verbose=0)
+mf = scf.RHF(mol).run(verbose=0)
+
+# FCI 精确基准
+cisolver = fci.FCI(mf)
+cisolver.nroots = 4
+E_fcis, fcivec = cisolver.kernel()
+print("="*60)
+print("H₂ FCI 基准能量")
+print("="*60)
+for i, e in enumerate(E_fcis):
+    exc = (e - E_fcis[0]) * 27.2114
+    print(f"E{i} = {e:.8f} Ha  |  激发能：{exc:.4f} eV")
+    
+ha = nkx.operator.from_pyscf_molecule(mol)
+
+hi = nkx.hilbert.SpinOrbitalFermions(
+    n_orbitals=2,
+    s=1/2,
+    n_fermions_per_spin=(1,1),
+)
+
+
+class SingleStateAnsatz(nnx.Module):
+    """单态 Ansatz：适配费米子系统的复数值 FFNN"""
+
+    def __init__(self, n_spin_orbitals: int, hidden_dim: int = 16, *, rngs: nnx.Rngs):
+        super().__init__()
+        self.n_spin_orbitals = n_spin_orbitals
+        self.linear1 = nnx.Linear(n_spin_orbitals, hidden_dim, rngs=rngs, param_dtype=complex)
+        self.linear2 = nnx.Linear(hidden_dim, hidden_dim, rngs=rngs, param_dtype=complex)
+        self.output = nnx.Linear(hidden_dim, 1, rngs=rngs, param_dtype=complex)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        h = nnx.tanh(self.linear1(x))
+        h = nnx.tanh(self.linear2(h))
+        out = self.output(h)
+        return jnp.squeeze(out)
+
+class NESTotalAnsatz(nnx.Module):
+    def __init__(self, n_spin_orbitals: int, n_states: int = 2, hidden_dim: int = 8, *, rngs: nnx.Rngs):
+        super().__init__()
+        self.K = n_states
+        self.n_spin = n_spin_orbitals
+
+        self.single_ansatz_list = nnx.List()
+        key = rngs.params()
+        for _ in range(n_states):
+            key, sub_key = jax.random.split(key)
+            sub_rngs = nnx.Rngs(params=sub_key)
+            
+            ansatz = SingleStateAnsatz(
+                n_spin_orbitals, 
+                hidden_dim, 
+                rngs=sub_rngs
+            )
+            self.single_ansatz_list.append(ansatz)
+    def __call__(self, x: jax.Array):
+        def _forward_single(x_single):
+            # 形状：[K, n_spin]
+            #print(f'x_single.shape: {x_single.shape}')
+            x_single = x_single.reshape(self.K, self.n_spin)
+            L = jnp.zeros((self.K, self.K), dtype=complex)
+            for i in range(self.K):
+                for j in range(self.K):
+                    L = L.at[i, j].set(
+                        self.single_ansatz_list[j](x_single[i])
+                    )
+            L_stable = L - L.max()
+            sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L_stable))
+            log_Psi_stable = log_abs_det + 1j * jnp.angle(sign)
+            return log_Psi_stable, L_stable , L.max()
+        
+        # 安全的批量处理
+        if x.ndim == 2 and x.shape[-1] == self.n_spin:
+            # 直接处理单个样本
+            return _forward_single(x)
+        elif x.ndim == 2 and x.shape[-1] == self.n_spin*self.K:
+            x = x.reshape(-1, self.K, self.n_spin)
+            # 直接处理批量样本
+            return jax.vmap(_forward_single)(x)
+        
+        elif x.ndim == 3:
+            x = x.reshape(-1, self.K, self.n_spin)
+            return jax.vmap(_forward_single)(x)
+        elif x.ndim ==1:
+            x = x[None, :]
+            x = x.reshape(self.K, self.n_spin)
+            return _forward_single(x)
+        else:
+            raise ValueError(f'不支持的输入形状: {x.shape}')
+            
+
+class NESTotalAnsatz_stable(nnx.Module):
+    def __init__(self, n_spin_orbitals: int, n_states: int = 2, hidden_dim: int = 8, *, rngs: nnx.Rngs):
+        super().__init__()
+        self.K = n_states
+        self.n_spin = n_spin_orbitals
+
+        self.single_ansatz_list = nnx.List()
+        key = rngs.params()
+        for _ in range(n_states):
+            key, sub_key = jax.random.split(key)
+            sub_rngs = nnx.Rngs(params=sub_key)
+            
+            ansatz = SingleStateAnsatz(
+                n_spin_orbitals, 
+                hidden_dim, 
+                rngs=sub_rngs
+            )
+            self.single_ansatz_list.append(ansatz)
+    def __call__(self, x: jax.Array):
+        def _forward_single(x_single):
+            # 形状：[K, n_spin]
+            #print(f'x_single.shape: {x_single.shape}')
+            x_single = x_single.reshape(self.K, self.n_spin)
+            L = jnp.zeros((self.K, self.K), dtype=complex)
+            for i in range(self.K):
+                for j in range(self.K):
+                    L = L.at[i, j].set(
+                        self.single_ansatz_list[j](x_single[i])
+                    )
+            L_stable = L - L.max()
+            sign, log_abs_det = jnp.linalg.slogdet(jnp.exp(L_stable))
+            log_Psi_stable = log_abs_det + 1j * jnp.angle(sign)
+            return log_Psi_stable, L_stable , L.max()
+        
+        # 安全的批量处理
+        if x.ndim == 2 and x.shape[-1] == self.n_spin:
+            # 直接处理单个样本
+            return _forward_single(x)
+        elif x.ndim == 2 and x.shape[-1] == self.n_spin*self.K:
+            x = x.reshape(-1, self.K, self.n_spin)
+            # 直接处理批量样本
+            return jax.vmap(_forward_single)(x)
+        
+        elif x.ndim == 3:
+            x = x.reshape(-1, self.K, self.n_spin)
+            return jax.vmap(_forward_single)(x)
+        elif x.ndim ==1:
+            x = x[None, :]
+            x = x.reshape(self.K, self.n_spin)
+            return _forward_single(x)
+        else:
+            raise ValueError(f'不支持的输入形状: {x.shape}')    
+
+def create_machine(model: NESTotalAnsatz):
+    """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        #print(f'x.shape: {sigma.shape}  ')
+        m = nnx.merge(graphdef, params)
+        log_psi_total,log_M_matrix = m(sigma)
+        return log_psi_total
+
+    return machine, graphdef, state
+
+
+def create_machine_matrix(model: NESTotalAnsatz):
+    """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        #print(f'x.shape: {sigma.shape}  ')
+        m = nnx.merge(graphdef, params)
+        log_psi_total,log_M_matrix= m(sigma)
+        return log_M_matrix
+
+    return machine, graphdef, state
+
+def create_machine_matrix_max(model: NESTotalAnsatz):
+    """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        #print(f'x.shape: {sigma.shape}  ')
+        m = nnx.merge(graphdef, params)
+        log_psi_total,log_M_matrix= m(sigma)
+        max = log_M_matrix.max(axis=(1,2))
+        return max
+
+    return machine, graphdef, state
+
+def create_single_machine(model: SingleStateAnsatz):
+    """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
+    graphdef, state = nnx.split(model)
+
+    @jax.jit
+    def machine(params, sigma):
+        m = nnx.merge(graphdef, params)
+        log_psi = m(sigma)
+        return log_psi
+
+    return machine, graphdef, state
+
+def statistics(x):
+    """计算样本统计量"""
+    mean = jnp.mean(x)
+    var = jnp.var(x)
+    return mean, jnp.sqrt(var / x.shape[0])
+
+def Ham_psi(ha: nk.operator.DiscreteOperator, single_machine, params, x):
+    """
+    🔥 同时支持：
+    - 单个态 x: (n_spin,)
+    - 批量态 x: (batch_size, n_spin)
+    """
+    # ======================
+    # 核心：自动给单个样本增加 batch 维度
+    # ======================
+    is_single = (x.ndim == 1)
+    if is_single:
+        x = x[None, :]  # (n_spin,) → (1, n_spin)
+
+    # ======================
+    # 向量化计算（批处理）
+    # ======================
+    def _single_hpsi(x_single):
+        x_primes, mels = ha.get_conn_padded(x_single)
+        log_psi_vals = single_machine(params, x_primes)
+        psi_vals = jnp.exp(log_psi_vals)
+        return jnp.sum(mels * psi_vals)
+
+    # 批量处理
+    H_psi_batch = jax.vmap(_single_hpsi)(x)
+
+    # ======================
+    # 如果是单个输入，就压回单个输出
+    # ======================
+    if is_single:
+        return H_psi_batch[0]
+    else:
+        return H_psi_batch
+    
+def Ham_Psi(ha, single_machine_list, total_params, x):
+    K = len(single_machine_list)
+    # ======================
+    # 核心：单样本 与 批处理 自动兼容
+    # ======================
+    if x.ndim == 2:
+        # 输入形状：(K, n_spin) → 单个扩展态 → 返回 (K,K)
+        def _single_HamPsi(x_single):
+            HPsi = jnp.zeros((K, K), dtype=complex)
+            for i in range(K):
+                xi = x_single[i]  # 单态：(4,)
+                for j in range(K):
+                    machine_j = single_machine_list[j]
+                    params_j = total_params['single_ansatz_list'][j]
+                    val = Ham_psi(ha, machine_j, params_j, xi)
+                    HPsi = HPsi.at[i, j].set(val)
+            return HPsi
+        
+        return _single_HamPsi(x)
+
+    elif x.ndim == 3:
+        # 输入形状：(batch, K, n_spin) → 批量 → 返回 (batch, K, K)
+        def _single_HamPsi(x_single):
+            HPsi = jnp.zeros((K, K), dtype=complex)
+            for i in range(K):
+                xi = x_single[i]
+                for j in range(K):
+                    machine_j = single_machine_list[j]
+                    params_j = total_params['single_ansatz_list'][j]
+                    val = Ham_psi(ha, machine_j, params_j, xi)
+                    HPsi = HPsi.at[i, j].set(val)
+            return HPsi
+        
+        # 自动批处理！
+        return jax.vmap(_single_HamPsi)(x)
+
+    else:
+        raise ValueError(f"不支持的输入形状: {x.shape}")
+
+def NES_loss_energy(ha, total_matrix_machine,single_machine_list,total_params, x):
+    log_M = total_matrix_machine(total_params,x)
+    Psi_Matrix = jnp.exp(log_M)
+    # 添加正则化项，防止矩阵奇异
+    #Psi_Matrix += 1e-6 * jnp.eye(Psi_Matrix.shape[0])
+    H_psi_x = Ham_Psi(ha,single_machine_list,total_params,x)
+    Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix, H_psi_x)
+    return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv
+
+def NES_loss_energy_stable(ha, total_matrix_machine,total_max_machine,single_machine_list,total_params, x):
+    L_stable = total_matrix_machine(total_params,x)
+    Psi_Matrix_stable = jnp.exp(L_stable)
+    
+    # 添加正则化项，防止矩阵奇异
+    #Psi_Matrix += 1e-6 * jnp.eye(Psi_Matrix.shape[0])
+    M = jnp.log(Ham_Psi(ha,single_machine_list,total_params,x))
+    M_stable =  M - total_max_machine(total_params,x).reshape(-1,1,1) # ~M = log(Opsi) - L_max
+    HPsi_stable = jnp.exp(M_stable)
+    Psi_Matrix_inv = jnp.linalg.solve(Psi_Matrix_stable, HPsi_stable)
+    return jnp.real(jnp.trace(Psi_Matrix_inv, axis1=-2, axis2=-1)), Psi_Matrix_inv
+
+
+def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total_machine,total_machine_max,single_machine_list,total_params, x_batch):
+    # 1. 批量局域能量矩阵
+    loss_batch,E_L_batch = NES_loss_energy_stable(ha, total_matrix_machine,total_machine_max,single_machine_list, total_params, x_batch)
+    E_L_mean = jnp.mean(E_L_batch, axis=0)
+    #print(f'E_L_batch.shape={E_L_batch.shape}')
+    
+    E_L_centered = E_L_batch - E_L_mean
+    
+    tr_centered =  jnp.trace(E_L_centered, axis1=-2, axis2=-1) 
+
+    grad_logPsi = jax.grad(total_machine, argnums=0, holomorphic=True)
+    vmap_grad_logPsi = jax.vmap(grad_logPsi, in_axes=(None, 0))
+
+    # 4. 计算 ∇logΨs
+    dlogPsi_batch = vmap_grad_logPsi(total_params, x_batch)
+
+    # 5. 核心加权平均
+    def weight_and_mean(grad_component):
+        weights = tr_centered.reshape( (-1,) + (1,)*(grad_component.ndim - 1) )
+        return jnp.mean(weights * jnp.conj(grad_component), axis=0)
+
+    grad = jax.tree.map(weight_and_mean, dlogPsi_batch)
+
+    loss_mean = loss_batch.mean()
+    return grad, loss_mean, E_L_mean
+
+
+#@partial(jax.jit, static_argnames=("machine",))
+def compute_qgt(machine, params, sigma, diag_shift=0.1):
+    """
+    计算量子几何张量（QGT）/ F 矩阵
+    
+    QGT 定义：
+    S_ij = ⟨∂_i log ψ* ∂_j log ψ⟩ - ⟨∂_i log ψ*⟩⟨∂_j log ψ⟩
+    
+    这就是 NetKet SR 的核心
+    
+    参数：
+    - machine: 波函数机器
+    - params: 网络参数
+    - sigma: 样本 (n_samples, n_orbitals)
+    - diag_shift: 对角线正则化参数 λ
+    
+    返回：
+    - qgt_reg: 正则化后的 QGT 矩阵 (n_params, n_params)
+    - unravel_fn: 用于将展平的向量恢复为 PyTree 结构的函数
+    """
+    n_samples = sigma.shape[0]
+    
+    # 步骤 1: 计算每个样本的 ∇log ψ
+    def log_psi_single(p, s):
+        return machine(p, s)
+    
+    def compute_grad_for_sample(s):
+        return jax.grad(lambda p: log_psi_single(p, s), holomorphic=True)(params)
+    
+    # grad_matrix 是 PyTree，每个元素形状为 (n_samples, ...)
+    grad_matrix = jax.vmap(compute_grad_for_sample)(sigma)
+    
+    # 步骤 2: 将 PyTree 展平为矩阵 (n_samples, n_params)
+    grad_flat, unravel_fn = ravel_pytree(grad_matrix)
+    grad_flat = grad_flat.reshape(n_samples, -1)
+    
+    # 步骤 3: 中心化（减去均值）
+    # 这对应 QGT 定义中的第二项：- ⟨∂_i log ψ*⟩⟨∂_j log ψ⟩
+    grad_mean = jnp.mean(grad_flat, axis=0, keepdims=True)  # (1, n_params)
+    grad_centered = grad_flat - grad_mean  # (n_samples, n_params)
+    
+    # 步骤 4: 计算 QGT = (1/N) * Σ ∇log ψ* ∇log ψ^T
+    # 注意：对于复数，需要使用共轭
+    qgt = (1.0 / n_samples) * jnp.conj(grad_centered).T @ grad_centered
+    
+    # 步骤 5: 添加正则化
+    qgt_reg = qgt + diag_shift * jnp.eye(qgt.shape[0])
+    
+    return qgt_reg, unravel_fn
+
+def sampler_info(samples:jnp.array,K:int):
+    test_samples = np.array(samples.reshape(-1, 4*K))
+    count = Counter(tuple(each_row.tolist()) for each_row in test_samples)
+    for tpl, count_ in count.items():
+        print(f"元组 {tpl} 出现了 {count_} 次")
+    return count
+
+SINGLE_SIZE = hi.size
+
+@nk.utils.struct.dataclass
+class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
+    edges: jnp.ndarray
+    K: int = nk.utils.struct.static_field()
+    single_size: int = nk.utils.struct.static_field()
+
+    def _check_duplicate(self, sigma_ext):
+        """NES约束：子组态不重复
+        🔥 核心修复：返回【标量布尔值】，匹配while_loop初始值形状
+        """
+        sub = sigma_ext.reshape((-1, self.K, self.single_size))
+        # 原代码返回数组 → 改为 .squeeze() 压缩成标量！
+        return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1).squeeze()
+
+    def transition(self, sampler, machine, parameters, state, rng, sigma):
+        """跃迁规则（完全不变）"""
+        batch_size = sigma.shape[0]
+        key1, key2 = jax.random.split(rng)
+
+        e_idx = jax.random.randint(key1, (batch_size,), 0, self.edges.shape[0])
+        sel_e = self.edges[e_idx]
+        i, j = sel_e[:,0], sel_e[:,1]
+
+        sigma_cand = sigma.at[jnp.arange(batch_size),i].set(sigma[jnp.arange(batch_size),j])
+        sigma_cand = sigma_cand.at[jnp.arange(batch_size),j].set(sigma[jnp.arange(batch_size),i])
+
+        invalid = self._check_duplicate(sigma_cand)
+        new_sigma = jnp.where(invalid[:, None], sigma, sigma_cand)
+
+        return new_sigma, None
+
+    def random_state(self, sampler, machine, parameters, state, rng):
+        """随机态生成（仅修复标量形状）"""
+        sigma_shape = state.σ.shape
+        hilbert = sampler.hilbert
+
+        def gen_single(key):
+            max_tries = 100
+            def cond(c): 
+                return (c[0] < max_tries) & c[2]
+            
+            def body(c):
+                tries, k, _, _ = c
+                k, k_new = jax.random.split(k)
+                s = hilbert.random_state(k_new)
+                is_dup = self._check_duplicate(s)  # 现在是标量！
+                return (tries + 1, k, is_dup, s)
+            
+            # 初始值 c[2] = True（标量布尔值），和body返回值形状完全匹配
+            init_c = (0, key, True, hilbert.random_state(key))
+            final_c = jax.lax.while_loop(cond, body, init_c)
+            tries, _, is_dup, s = final_c
+            return jax.lax.cond(is_dup, lambda: hilbert.random_state(key), lambda: s)
+        
+        keys = jax.random.split(rng, sigma_shape[0])
+        return jax.vmap(gen_single)(keys)
+
+
+if __name__ == '__main__':
+    N_CHAINS = 16
+    N_WARMUP = 100
+    N_SAMPLES_PER_CHAIN = 200
+    SWEEP_SIZE = 30
+    N_ITER =400
+    SINGLE_SIZE = hi.size  # 单个子系统维度 = 4
+    Natural_Grad = True
+
+    total_ansatz = NESTotalAnsatz(4,K,12,rngs=nnx.Rngs(11))
+    total_machine, total_graphdef,total_params = create_machine(total_ansatz)
+    total_matrix_machine, total_graphdef,total_params = create_machine_matrix(total_ansatz)
+    total_matirx_max,_,_ = create_machine_max(total_ansatz)
+
+    single_machine_list = []
+    for ansatz in total_ansatz.single_ansatz_list:
+        m, g, p = create_single_machine(ansatz)
+        single_machine_list.append(m)
+        
+        
+
+    optimizer = optax.sgd(learning_rate=0.01)
+    opt_state = optimizer.init(total_params)
+
+    ext_edges = []
+    for k in range(K):
+        offset = k * SINGLE_SIZE
+        for (i, j) in single_edges:
+            ext_edges.append((i + offset, j + offset))
+    ext_edges = jnp.array(ext_edges)  # 转为jax数组（关键修复）
+
+    nes_rule = NESFermionHopRule(edges=ext_edges, K=K, single_size=SINGLE_SIZE)
+    nes_sampler = nk.sampler.MetropolisSampler(
+        hilbert=hi_ext,
+        rule=nes_rule,
+        n_chains=16,
+        sweep_size=SWEEP_SIZE
+    )
+
+
+    # 采样器状态初始化（替代原 init_sampler_state）
+    sampler_rng = jax.random.PRNGKey(21)
+    sampler_state = nes_sampler.init_state(total_machine, total_params, sampler_rng)
+
+    # ==================== 训练循环（仅替换采样部分） ====================
+    print("\n" + "="*60)
+    print("开始多链 NES-VMC 训练 (NetKet 自定义采样器 + 朴素梯度下降)")
+    print("="*60)
+    print(f"基态能量={E_fcis[0]:.8f} Ha| 第一激发态能量={E_fcis[1]:.8f} Ha| 第二激发态能量={E_fcis[2]:.8f} Ha")
+
+    history = {
+        'step': [],
+        'energy_0st': [],
+        'energy_1st': [],
+        #'energy_2st': [],
+        'energy_std': [],
+        'loss': [],
+        'params': [],
+        'E_Lmatrix':[],
+        'natural_grad':[],
+        'grad_flat':[],
+        'samples':[],
+        'log_Psi':[],
+        'log_M':[],
+        'log_Psi_mean':[],
+        'log_Psi_min':[],
+        'log_Psi_max':[],
+        'grad_norm':[],
+    }
+
+    start_time = time.time()
+    for step in range(N_ITER):
+        # 2. 正式采样
+        samples_raw, sampler_state = nes_sampler.sample(
+            machine=total_machine, parameters=total_params, 
+            state=sampler_state, chain_length=N_SAMPLES_PER_CHAIN
+        )
+            # 3. 维度重塑，适配梯度函数输入
+        samples = samples_raw.reshape(-1, hi_ext.size)
+        x_batch = samples.reshape(-1, K, 4)
+        # 3. 计算能量和自然梯度（逻辑和原代码一致）
+        grad, loss_mean, E_L_mean = nes_vmc_gradient(ha=ha,
+                                                    total_machine_max=total_max,
+                                                    total_machine=total_machine,
+                                                    single_machine_list=single_machine_list,
+                                                    total_params=total_params,
+                                                    x_batch=samples.reshape(-1,K,4))
+        #grad = jax.tree_util.tree_map(lambda x: x * 2, grad)
+        grad_flat , grad_unravel_fn = ravel_pytree(grad)
+        if Natural_Grad == True:
+            
+            qgt_reg, unravel_fn = compute_qgt(total_machine, total_params, samples.reshape(-1,K,4), diag_shift=0.001)
+            
+            # # 自然梯度求解
+            natural_grad_flat = jnp.linalg.solve(qgt_reg, grad_flat)
+            natural_grad = grad_unravel_fn(natural_grad_flat)
+            grad = natural_grad
+            
+        # 4. 更新参数
+        updates, opt_state = optimizer.update(grad, opt_state, total_params)
+        total_params = optax.apply_updates(total_params, updates)
+        
+        
+        
+        log_Psi_batch = total_machine(total_params, samples.reshape(-1,K,4))
+        eig_vals, eig_vecs = jnp.linalg.eigh(E_L_mean)
+        grad_norm = jnp.linalg.norm(grad_flat)
+        
+        
+        history['step'].append(step)
+        history['E_Lmatrix'].append(E_L_mean)
+        history['samples'].append(samples)
+        history['loss'].append(loss_mean)
+        history['log_Psi_mean'].append(log_Psi_batch.mean())
+        history['log_Psi_min'].append(log_Psi_batch.min())
+        history['log_Psi_max'].append(log_Psi_batch.max())
+        history['grad_norm'].append(grad_norm)
+        history['energy_0st'].append(eig_vals[0])
+        history['energy_1st'].append(eig_vals[1])
+        #history['energy_2st'].append(eig_vals[2])
+        history['params'].append(total_params)
+        # 5. 记录历史
+        if step % 5 == 0 or step == N_ITER - 1:
+            # --------------------- 【NES-VMC 监控模板】直接用 ---------------------
+            # 1. 监控 log_Psi
+            #log_Psi_batch = total_machine(total_params, samples.reshape(-1,K,4))
+            print(f"log_Psi: mean={log_Psi_batch.mean():.3f} | min={log_Psi_batch.min():.3f} | max={log_Psi_batch.max():.3f}")
+
+            # 2. 监控梯度范数
+            
+            print(f"grad norm = {grad_norm:.4f}")
+            print(f"Step {step:3d} | Loss: {loss_mean}|0st能量={eig_vals[0]:.8f} Ha｜1st能量={eig_vals[1]:.8f} Ha｜2st能量={eig_vals[2]:.8f} Ha")
+            # print(f'grad={grad_flat[30:31]}')
+            print('#-----------------------------------------#')
+
+
+    end_time = time.time()
+    print(f"训练耗时：{end_time - start_time:.2f} 秒")
+    # 最终结果
+    print("\n" + "="*60)
+    print(f"训练完成!")
+    print("="*60)

@@ -286,269 +286,6 @@ def nes_vmc_gradient(ha: nk.operator.DiscreteOperator,total_matrix_machine,total
     loss_mean = loss_batch.mean()
     return grad, loss_mean, E_L_mean
 
-def extract_excitation_energies(params, model_graphdef, K=2, n_samples=10000):
-    """
-    从训练好的模型中提取激发态能量
-    """
-    # 生成大量样本
-    total_ansatz = nnx.merge(model_graphdef, params)
-    machine, _, _ = create_machine(total_ansatz)
-    sampler_state = sampler.init_state(machine, params)
-    
-    samples, _ = sampler.sample(
-        machine, params, state=sampler_state, chain_length=n_samples//sampler.n_chains
-    )
-    samples = samples.reshape(-1, K, 4)
-    
-    # 计算平均局域能量矩阵
-    E_L, _ = compute_local_energy_matrix(model_graphdef, params, samples, ha, K)
-    E_L_avg = jnp.mean(E_L, axis=0)
-    
-    # 对角化
-    eig_vals, eig_vecs = jnp.linalg.eigh(E_L_avg)
-    
-    # 排序并输出结果
-    print("\n" + "="*60)
-    print("NES-VMC 激发态能量结果")
-    print("="*60)
-    for i, e in enumerate(eig_vals):
-        exc = (e - eig_vals[0]) * 27.2114
-        fci_e = E_fcis[i] if i < len(E_fcis) else None
-        fci_exc = (fci_e - E_fcis[0]) * 27.2114 if fci_e is not None else None
-        
-        print(f"E{i}: {e:.8f} Ha (FCI: {fci_e:.8f} Ha) | 激发能: {exc:.4f} eV (FCI: {fci_exc:.4f} eV)")
-    
-    return eig_vals, E_L_avg
-
-
-
-
-    # 向量化：批处理 → 行处理
-    batch_apply = jax.vmap(lambda m, s: jax.vmap(apply_hamiltonian_to_M_row)(m, s))
-    # print(f'M.shape={M.shape}')
-    # print(f'sigma.shape={sigma.shape}')
-    H_M = batch_apply(M, sigma)
-    return H_M
-
-def generate_random_initial_states(hi_ext, n_chains, seed=42):
-    """
-    🔥 兼容 TensorDiscreteHilbert！永远生成 x1 ≠ x2 的合法扩展态
-    自动把扩展态切分成两个单态，保证绝不相同
-    """
-    import jax.numpy as jnp
-    import jax.random as jr
-
-    key = jr.PRNGKey(seed)
-    n_spin = hi_ext.size // 2  # 自动获取单个系统的自旋数
-    init_states = []
-
-    for _ in range(n_chains):
-        # 随机生成两个独立的单态
-        key, k1, k2 = jr.split(key, 3)
-        
-        # 生成两个不同的随机态
-        # 方法：先生成，若相同就重新生成，直到不同
-        while True:
-            s1 = hi_ext.random_state(k1)
-            s2 = hi_ext.random_state(k2)
-            
-            # 切分扩展态 → 拿到内部两个真实子态
-            x1 = s1[:n_spin]
-            x2 = s2[n_spin:]
-            
-            # 保证子态不相等
-            if not jnp.all(x1 == x2):
-                break
-            
-            # 相等就换新随机数
-            key, k2 = jr.split(key)
-
-        # 拼接成合法扩展态 [x1, x2]
-        ext_state = jnp.concatenate([x1, x2])
-        init_states.append(ext_state)
-
-    return jnp.stack(init_states)
-
-
-def init_sampler_state(hi, n_chains, seed=42):
-    init_states = generate_random_initial_states(hi, n_chains, seed)
-    key = jax.random.PRNGKey(seed)
-    chain_keys = jax.random.split(key, n_chains)  # 每条链独立随机数
-    return (init_states, chain_keys)
-
-# ===================== 核心修改：K 作为显式参数传入 =====================
-def make_get_all_next_states(K: int, SINGLE_HILBERT_SIZE:int,edges):
-    """
-    K: 显式传入的扩展副本数（NES-VMC 的 K）
-    edges: 跃迁边，保持你的顺序不变
-    """
-    @jax.jit
-    def get_all_next_states_jit(S: jnp.ndarray):
-        next_states = []
-        valid_masks = []
-
-        for (i, j) in edges:
-            occ_i = S[..., i]
-            occ_j = S[..., j]
-            # 原始费米子跃迁有效条件
-            valid_hop = (occ_i != occ_j)
-
-            # 执行跃迁
-            new_state = S.at[..., i].set(occ_j).at[..., j].set(occ_i)
-
-            # ----------------------------------------------------------------
-            # 核心：按 K 切分 x1, x2, ..., xK
-            # ----------------------------------------------------------------
-            x_list = jnp.split(new_state, K, axis=-1)
-
-            # 检查：任意两个子组态不能相等
-            has_duplicate = False
-            for a in range(K):
-                for b in range(a + 1, K):
-                    equal = jnp.all(x_list[a] == x_list[b], axis=-1)
-                    has_duplicate = jnp.logical_or(has_duplicate, equal)
-
-            # 最终有效：能跃迁 + 无重复组态
-            valid = valid_hop & (~has_duplicate)
-            next_states.append(new_state)
-            valid_masks.append(valid)
-
-        return jnp.stack(next_states), jnp.stack(valid_masks)
-
-    return get_all_next_states_jit
-
-
-# ==============================================
-# 3. Metropolis 单步跃迁
-# ==============================================
-def make_metropolis_hastings_step(K: int, SINGLE_HILBERT_SIZE:int,edges, machine):
-    get_all_next = make_get_all_next_states(K,SINGLE_HILBERT_SIZE,edges)
-    
-    @jax.jit
-    def mh_step(params, state: jnp.ndarray, key: jax.Array):
-        candidates, valid_mask = get_all_next(state[None, :])
-        candidates = candidates[:, 0]
-        valid_mask = valid_mask[:, 0]
-        
-        key, subk = jax.random.split(key)
-        idx = jax.random.choice(subk, len(edges))
-        cand = candidates[idx]
-        is_valid = valid_mask[idx]
-        
-        log_curr = machine(params, state)
-        log_cand = machine(params, cand)
-        log_acc = 2 * jnp.real(log_cand - log_curr)
-        
-        key, subk = jax.random.split(key)
-        accept = is_valid & (log_acc > jnp.log(jax.random.uniform(subk)))
-        new_state = jnp.where(accept, cand, state)
-        return new_state, key
-    
-    return mh_step
-
-@partial(jax.jit, static_argnums=(0,1,3,4,6,7,8))
-def mcmc_sampler_multichain(
-    n_samples_per_chain: int,
-    n_warmup: int,             # 单位：sweep
-    sampler_state: tuple,      # ✅ NetKet 风格状态：(current_states, chain_keys)
-    edges: tuple,
-    machine: callable,
-    params: dict,
-    sweep_size: int = 32,       # ✅ 保留 sweep_size
-    K: int = 2,
-    SINGLE_HILBERT_SIZE: int = 4,
-):
-    # 解开 sampler_state（和 NetKet 完全一致）
-    current_states, current_keys = sampler_state
-    #n_chains = current_states.shape[0]
-    mh_step = make_metropolis_hastings_step(K, SINGLE_HILBERT_SIZE, edges, machine)
-
-    # -------------------------
-    # 一次 sweep = 连续跳 sweep_size 次
-    # -------------------------
-    def single_sweep(carry, _):
-        states, keys = carry
-        # 多链并行 VMAP
-        (new_s, new_k), _ = jax.lax.scan(
-            lambda c, _: (jax.vmap(mh_step, in_axes=(None, 0, 0))(params, c[0], c[1]), None),
-            (states, keys),
-            length=sweep_size
-        )
-        return (new_s, new_k), new_s
-
-    # -------------------------
-    # 1) Warmup（仅更新状态，不保存样本）
-    # -------------------------
-    if n_warmup > 0:
-        (current_states, current_keys), _ = jax.lax.scan(
-            single_sweep, (current_states, current_keys), length=n_warmup
-        )
-
-    # -------------------------
-    # 2) 正式采样（保存样本 + 更新最终状态）
-    # -------------------------
-    (final_states, final_keys), samples = jax.lax.scan(
-        single_sweep, (current_states, current_keys), length=n_samples_per_chain
-    )
-
-    # 打包新的 sampler_state（返回给下一次迭代）
-    new_sampler_state = (final_states, final_keys)
-    
-    # 展平样本：[n_samples, n_chains, n_sites] → [n_samples*n_chains, n_sites]
-    #samples_flat = samples.reshape(-1, current_states.shape[-1])
-    return samples, new_sampler_state
-
-
-def compute_nes_qgt(machine, graphdef, params, samples, diag_shift=0.01):
-    """
-    ###########################################################
-    ✅ 最终无报错版 | 完全适配 model(x) = (ln detM, lnM[2,2])
-    ✅ 严格遵循你的 QGT 公式：<g*g> - <g*><g>
-    ✅ 解决 JAX 只能对标量求导的核心限制
-    ###########################################################
-    """
-
-    # --------------------------
-    # 1. 前向：返回 展平后的 lnM (向量，不是矩阵！)
-    # --------------------------
-    def forward_logM_flat(params, x):
-        model = nnx.merge(graphdef, params)
-        ln_det_M, ln_M = model(x)        # ln_M: [2,2] 矩阵
-        return jnp.ravel(ln_M)            # ✅ 转成向量 [4]，JAX 允许求导
-
-    # --------------------------
-    # 2. 单样本梯度（对标量求和后求导，完全合法）
-    # --------------------------
-    def grad_single(x):
-        # 定义：对 展平向量的“实部+虚部”求和 → 变成标量
-        def scalar_forward(params, x):
-            f = forward_logM_flat(params, x)
-            return jnp.real(f).sum() + 1j * jnp.imag(f).sum()
-
-        # 对标量求导 → 不报错！
-        grad = jax.grad(scalar_forward, holomorphic=True)(params, x)
-        grad_flat, _ = ravel_pytree(grad)
-        return grad_flat
-
-    # --------------------------
-    # 3. 批量所有样本
-    # --------------------------
-    grads = jax.vmap(grad_single)(samples)    # [N_samples, N_params]
-
-    # --------------------------
-    # 4. 严格按你的公式计算 QGT
-    # --------------------------
-    term1 = jnp.mean(grads[..., None] * grads[:, None, :].conj(), axis=0)
-    g_mean = jnp.mean(grads, axis=0)
-    term2 = g_mean[..., None] * g_mean[None, :].conj()
-    S = term1 - term2
-
-    # 正则化
-    S_reg = S + diag_shift * jnp.eye(S.shape[0], dtype=S.dtype)
-
-    return S_reg, ravel_pytree(params)[1]
-
-
 #@partial(jax.jit, static_argnames=("machine",))
 def compute_qgt(machine, params, sigma, diag_shift=0.1):
     """
@@ -606,6 +343,14 @@ def sampler_info(samples:jnp.array,K:int):
         print(f"元组 {tpl} 出现了 {count_} 次")
     return count
 
+
+SINGLE_SIZE = hi.size
+
+import jax
+import jax.numpy as jnp
+import netket as nk
+
+SINGLE_SIZE = hi.size
 import jax
 import jax.numpy as jnp
 import netket as nk
@@ -619,15 +364,28 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
     single_size: int = nk.utils.struct.static_field()
 
     def _check_duplicate(self, sigma_ext):
-        """NES约束：子组态不重复
-        🔥 核心修复：返回【标量布尔值】，匹配while_loop初始值形状
+        """NES约束：检测任意两个子组态重复
+        兼容一维单样本(返回标量) / 二维批量(返回batch数组)
         """
-        sub = sigma_ext.reshape((-1, self.K, self.single_size))
-        # 原代码返回数组 → 改为 .squeeze() 压缩成标量！
-        return jnp.any(jnp.all(sub[...,1:,:] == sub[...,0:1,:], axis=-1), axis=-1).squeeze()
+        one_d_input = (sigma_ext.ndim == 1)
+        if one_d_input:
+            sigma_ext = sigma_ext[None, :]
+        
+        batch_dim = sigma_ext.shape[0]
+        sub = sigma_ext.reshape((batch_dim, self.K, self.single_size))
+        # 全部子组态两两比对
+        pair_equal = jnp.all(sub[:, :, None, :] == sub[:, None, :], axis=-1)
+        diag_mask = jnp.eye(self.K, dtype=jnp.bool_)[None, :, :]
+        off_diag_dup = jnp.where(diag_mask, False, pair_equal)
+        batch_dup = jnp.any(off_diag_dup, axis=(-2, -1))
+        
+        if one_d_input:
+            return batch_dup.squeeze()
+        return batch_dup
 
+    # 修复：补齐完整7个形参：self, sampler, machine, parameters, state, rng, sigma
     def transition(self, sampler, machine, parameters, state, rng, sigma):
-        """跃迁规则（完全不变）"""
+        """跃迁规则"""
         batch_size = sigma.shape[0]
         key1, key2 = jax.random.split(rng)
 
@@ -644,7 +402,7 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
         return new_sigma, None
 
     def random_state(self, sampler, machine, parameters, state, rng):
-        """随机态生成（仅修复标量形状）"""
+        """随机态生成（完全不变）"""
         sigma_shape = state.σ.shape
         hilbert = sampler.hilbert
 
@@ -657,10 +415,10 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
                 tries, k, _, _ = c
                 k, k_new = jax.random.split(k)
                 s = hilbert.random_state(k_new)
-                is_dup = self._check_duplicate(s)  # 现在是标量！
+                is_dup = self._check_duplicate(s)  # 一维输入自动返回标量
                 return (tries + 1, k, is_dup, s)
             
-            # 初始值 c[2] = True（标量布尔值），和body返回值形状完全匹配
+            # 初始值 c[2] = True（标量布尔值），匹配while_loop
             init_c = (0, key, True, hilbert.random_state(key))
             final_c = jax.lax.while_loop(cond, body, init_c)
             tries, _, is_dup, s = final_c
@@ -668,8 +426,7 @@ class NESFermionHopRule(nk.sampler.rules.MetropolisRule):
         
         keys = jax.random.split(rng, sigma_shape[0])
         return jax.vmap(gen_single)(keys)
-
-
+     
 import time
 # ======================
 # 超参数

@@ -1,0 +1,420 @@
+INFO:__main__:初始化 H₂ 分子和 FCI 基准能量
+INFO:__main__:FCI 基准能量: E0=-1.01546825, E1=-0.87542794, E2=-0.42938376
+DEBUG:__main__:Hamiltonian 算符创建完成, hilbert space size: 4
+/Users/yangjianfei/mac_vscode/神经网络量子态/5 月/0510/对数域改造 NES/NES_VMC_Stable_logdomain_fixed.py:70: DeprecationWarning: netket.experimental.hilbert.SpinOrbitalFermions is deprecated: use netket.hilbert.SpinOrbitalFermions (netket >= 3.12)
+  hi = nkx.hilbert.SpinOrbitalFermions(
+INFO:__main__:Hilbert space: 4 个自旋轨道
+INFO:__main__:扩展 Hilbert space (K=3): 12 个自旋轨道
+DEBUG:__main__:单粒子跃迁边: ((0, 1), (2, 3))
+INFO:__main__:============================================================
+INFO:__main__:NES-VMC 训练开始
+INFO:__main__:============================================================
+INFO:__main__:参数: K=3, N_CHAINS=16, N_SAMPLES_PER_CHAIN=200
+INFO:__main__:      N_ITER=400, Natural_Grad=True, SWEEP_SIZE=30
+INFO:__main__:创建 NESTotalAnsatz...
+INFO:__main__:NESTotalAnsatz 初始化: K=3, n_spin=4, hidden_dim=12
+DEBUG:__main__:SingleStateAnsatz 初始化: n_spin=4, hidden=12
+DEBUG:__main__:SingleStateAnsatz 初始化: n_spin=4, hidden=12
+DEBUG:__main__:SingleStateAnsatz 初始化: n_spin=4, hidden=12
+DEBUG:__main__:创建了 3 个 SingleStateAnsatz
+INFO:__main__:Ansatz 创建完成
+INFO:__main__:创建 wrapper functions...
+INFO:__main__:创建 sampling machine (create_machine)
+INFO:__main__:创建 L_stable matrix machine (create_machine_matrix)
+INFO:__main__:创建 L_max machine (create_machine_matrix_max)
+INFO:__main__:创建 single machine
+DEBUG:__main__:  创建 single_machine[0]
+INFO:__main__:创建 single machine
+DEBUG:__main__:  创建 single_machine[1]
+INFO:__main__:创建 single machine
+DEBUG:__main__:  创建 single_machine[2]
+INFO:__main__:共创建 3 个 single_machine
+INFO:__main__:优化器初始化完成 (SGD, lr=0.01)
+INFO:__main__:扩展跃迁边: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11]]
+INFO:__main__:采样器创建完成: 16 chains, sweep_size=30
+DEBUG:__main__:NESTotalAnsatz.__call__ 输入 shape: (16, 12)
+DEBUG:__main__:输入是单个扩展态 (K*n_spin,)
+DEBUG:__main__:  sampling machine: log_Psi shape=(16,)
+INFO:__main__:采样器状态初始化完成
+DEBUG:__main__:=== Step 0 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:NESTotalAnsatz.__call__ 输入 shape: (3200, 3, 4)
+DEBUG:__main__:输入是批量样本 (batch, K, n_spin)
+DEBUG:__main__:  matrix machine: L_stable shape=(3200, 3, 3)
+DEBUG:__main__:NESTotalAnsatz.__call__ 输入 shape: (3200, 3, 4)
+DEBUG:__main__:输入是批量样本 (batch, K, n_spin)
+DEBUG:__main__:  max machine: L_max shape=(3200,)
+DEBUG:__main__:NESTotalAnsatz.__call__ 输入 shape: (3, 4)
+DEBUG:__main__:输入是单个样本 (n_spin,)
+DEBUG:__main__:  sampling machine: log_Psi shape=()
+DEBUG:__main__:  grad norm: 3.9582
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 2.15e+03
+DEBUG:__main__:NESTotalAnsatz.__call__ 输入 shape: (3200, 3, 4)
+DEBUG:__main__:输入是批量样本 (batch, K, n_spin)
+DEBUG:__main__:  sampling machine: log_Psi shape=(3200,)
+DEBUG:__main__:=== Step 1 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.3910
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.35e+03
+DEBUG:__main__:=== Step 2 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.5771
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 2.68e+03
+DEBUG:__main__:=== Step 3 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.6103
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 3.07e+03
+DEBUG:__main__:=== Step 4 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.7177
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 4.88e+03
+DEBUG:__main__:=== Step 5 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.2631
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 3.27e+03
+DEBUG:__main__:=== Step 6 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.3331
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 5.76e+03
+DEBUG:__main__:=== Step 7 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 1.6108
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 2.43e+03
+DEBUG:__main__:=== Step 8 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1493
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 7.20e+03
+DEBUG:__main__:=== Step 9 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1581
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 7.94e+03
+DEBUG:__main__:=== Step 10 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0848
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 5.55e+03
+DEBUG:__main__:=== Step 11 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1277
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.00e+03
+DEBUG:__main__:=== Step 12 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1779
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.06e+04
+DEBUG:__main__:=== Step 13 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1985
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.69e+03
+DEBUG:__main__:=== Step 14 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1929
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 9.50e+03
+DEBUG:__main__:=== Step 15 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.2392
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.36e+03
+DEBUG:__main__:=== Step 16 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0718
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.01e+04
+DEBUG:__main__:=== Step 17 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0874
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 7.14e+03
+DEBUG:__main__:=== Step 18 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.2146
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.67e+04
+DEBUG:__main__:=== Step 19 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1553
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.64e+03
+DEBUG:__main__:=== Step 20 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0273
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.05e+03
+DEBUG:__main__:=== Step 21 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0578
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 5.67e+03
+DEBUG:__main__:=== Step 22 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1732
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 5.55e+03
+DEBUG:__main__:=== Step 23 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 1.6671
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 4.67e+03
+DEBUG:__main__:=== Step 24 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 9.0766
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 4.61e+03
+DEBUG:__main__:=== Step 25 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.5955
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.37e+04
+DEBUG:__main__:=== Step 26 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 1.0215
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.12e+05
+DEBUG:__main__:=== Step 27 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 1.1841
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 7.80e+03
+DEBUG:__main__:=== Step 28 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.3577
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.51e+06
+DEBUG:__main__:=== Step 29 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 1.3758
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.28e+04
+DEBUG:__main__:=== Step 30 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.4708
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.22e+04
+DEBUG:__main__:=== Step 31 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.2949
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.27e+04
+DEBUG:__main__:=== Step 32 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.6842
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 8.20e+03
+DEBUG:__main__:=== Step 33 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.5153
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 4.94e+03
+DEBUG:__main__:=== Step 34 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1715
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 7.38e+03
+DEBUG:__main__:=== Step 35 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 8.48e+03
+DEBUG:__main__:=== Step 36 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1019
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.70e+03
+DEBUG:__main__:=== Step 37 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0776
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 8.03e+03
+DEBUG:__main__:=== Step 38 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.9798
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 5.47e+03
+DEBUG:__main__:=== Step 39 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.1287
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 8.53e+03
+DEBUG:__main__:=== Step 40 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.9969
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 2.49e+04
+DEBUG:__main__:=== Step 41 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0023
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 3.20e+04
+DEBUG:__main__:=== Step 42 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.2406
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 3.22e+04
+DEBUG:__main__:=== Step 43 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 2.6794
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 5.59e+05
+DEBUG:__main__:=== Step 44 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 2.1114
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.40e+06
+DEBUG:__main__:=== Step 45 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.2984
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.92e+04
+DEBUG:__main__:=== Step 46 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 2.4053
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 8.45e+03
+DEBUG:__main__:=== Step 47 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 1.1296
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 7.60e+03
+DEBUG:__main__:=== Step 48 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.3200
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 3.92e+07
+DEBUG:__main__:=== Step 49 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 11.1569
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 3.65e+06
+DEBUG:__main__:=== Step 50 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 52.7433
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 1.96e+09
+DEBUG:__main__:=== Step 51 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0920
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 4.66e+06
+DEBUG:__main__:=== Step 52 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 53 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 54 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 55 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 56 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 57 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 58 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 59 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 60 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 61 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 62 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 63 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 64 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 65 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 66 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 67 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 68 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 69 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 70 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 71 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 72 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 73 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 74 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 75 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 76 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 77 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 78 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 79 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 80 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 81 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 82 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 83 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 84 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 85 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 86 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 87 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 88 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 89 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 90 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 91 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
+DEBUG:__main__:  grad norm: 0.0000
+DEBUG:__main__:  自然梯度计算完成, QGT 条件数: 6.68e+06
+DEBUG:__main__:=== Step 92 ===
+DEBUG:__main__:  采样: 3200 samples, x_batch shape: (3200, 3, 4)
