@@ -1,0 +1,7 @@
+{
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/experiments/LiH分子"
+    ],
+    "python.languageServer": "Pylance"
+}

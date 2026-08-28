@@ -1,0 +1,225 @@
+
+================================================================================
+NES-VMC Stable Training | Diagnostic Version
+================================================================================
+K = 2
+SINGLE_SIZE = 8
+target_loss = -2.00505776
+FCI E0 = -1.02613572 | E1 = -0.97892204
+================================================================================
+Hyperparameters
+================================================================================
+N_CHAINS = 32
+N_WARMUP = 50
+N_SAMPLES_PER_CHAIN = 200
+SWEEP_SIZE = 30
+N_ITER = 300
+Natural_Grad = False
+lr = 0.01
+clip_norm = 1.0
+grad_skip_threshold = 10.0
+qgt_diag_shift = 0.1
+DIAG_BATCH_SIZE = 128
+================================================================================
+Warmup
+================================================================================
+Warmup done.
+
+================================================================================
+Start Training
+================================================================================
+[Step    0]
+Loss=0.57973482 | target=-2.00505776 | gap=+2.58479257
+Grad | raw=1.9873e+00 | update=1.9873e+00 | clipped=1.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=0.812503 | std=6.1989e-01 | span=4.0741e+00
+logΨ.imag | mean=-0.472388 | std=1.8479e+00 | span=6.2224e+00
+shift | mean=0.818207 | std=2.2505e-01 | span=7.1008e-01
+cond(Ψ_stable) | first=2.4478e+00 | mean=4.2759e+00 | max=1.1276e+01
+trace(E_L).real | mean=0.41584386 | std=8.8120e-01 | span=4.1630e+00
+trace(E_L).imag | mean=-0.00867961 | std=2.4362e-01 | span=1.5193e+00
+E_L_mean diagnostics | herm_error=5.3582e-01 | imag_norm=1.7378e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.4922 | dlog_std_norm=9.1578e+01 | dlog_mean_norm=6.6205e+00 | dlog_std_ratio=1.3832e+01
+E0_herm=-0.05447282 | E1_herm=0.63420763
+E0_raw=-0.03106645-0.01096199j | E1_raw=0.61080126+0.00828052j
+#-------------------------------------------------------------------------------
+[Step   10]
+Loss=0.15182100 | target=-2.00505776 | gap=+2.15687875
+Grad | raw=1.9124e+00 | update=1.9124e+00 | clipped=1.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=1.187808 | std=6.2649e-01 | span=3.8961e+00
+logΨ.imag | mean=-0.434047 | std=1.8811e+00 | span=6.2056e+00
+shift | mean=0.990234 | std=2.5346e-01 | span=8.9384e-01
+cond(Ψ_stable) | first=3.6256e+00 | mean=4.3480e+00 | max=1.6942e+01
+trace(E_L).real | mean=-0.01964549 | std=1.0111e+00 | span=4.6719e+00
+trace(E_L).imag | mean=-0.01255568 | std=2.0635e-01 | span=1.7287e+00
+E_L_mean diagnostics | herm_error=1.0725e+00 | imag_norm=3.0296e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.5312 | dlog_std_norm=1.0102e+02 | dlog_mean_norm=7.3310e+00 | dlog_std_ratio=1.3780e+01
+E0_herm=-0.50355168 | E1_herm=0.65537268
+E0_raw=-0.36903336-0.00737084j | E1_raw=0.52085436+0.00622775j
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
+[Step   20]
+Loss=-0.19746320 | target=-2.00505776 | gap=+1.80759456
+Grad | raw=1.7710e+00 | update=1.7710e+00 | clipped=1.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=1.706638 | std=6.9236e-01 | span=3.4224e+00
+logΨ.imag | mean=-0.638885 | std=1.7831e+00 | span=6.2447e+00
+shift | mean=1.306204 | std=3.5336e-01 | span=1.1149e+00
+cond(Ψ_stable) | first=2.3898e+00 | mean=4.6584e+00 | max=1.3306e+01
+trace(E_L).real | mean=-0.09518480 | std=1.0271e+00 | span=4.7732e+00
+trace(E_L).imag | mean=0.01682199 | std=2.6030e-01 | span=2.0806e+00
+E_L_mean diagnostics | herm_error=1.0773e+00 | imag_norm=2.2183e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.4375 | dlog_std_norm=1.1257e+02 | dlog_mean_norm=7.9890e+00 | dlog_std_ratio=1.4090e+01
+E0_herm=-0.75851100 | E1_herm=0.56104780
+E0_raw=-0.60211529-0.00101349j | E1_raw=0.40465210-0.00052194j
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
+[Step   30]
+Loss=-0.55528493 | target=-2.00505776 | gap=+1.44977283
+Grad | raw=2.3532e+00 | update=2.3532e+00 | clipped=1.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=2.401233 | std=7.9994e-01 | span=4.0996e+00
+logΨ.imag | mean=-0.607941 | std=1.6761e+00 | span=6.2400e+00
+shift | mean=1.689412 | std=4.1198e-01 | span=1.3611e+00
+cond(Ψ_stable) | first=8.3181e+00 | mean=4.6969e+00 | max=1.3662e+01
+trace(E_L).real | mean=-0.19794616 | std=1.0785e+00 | span=4.2516e+00
+trace(E_L).imag | mean=0.01290965 | std=1.8304e-01 | span=1.3181e+00
+E_L_mean diagnostics | herm_error=9.0099e-01 | imag_norm=1.5293e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.4297 | dlog_std_norm=1.0532e+02 | dlog_mean_norm=8.7304e+00 | dlog_std_ratio=1.2064e+01
+E0_herm=-0.87239161 | E1_herm=0.31710668
+E0_raw=-0.77166235+0.00384614j | E1_raw=0.21637742-0.00517560j
+#-------------------------------------------------------------------------------
+[Step   40]
+Loss=-1.20125834 | target=-2.00505776 | gap=+0.80379942
+Grad | raw=2.3702e+00 | update=2.3702e+00 | clipped=1.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=6.608318 | std=7.2762e-01 | span=4.6465e+00
+logΨ.imag | mean=-0.173774 | std=1.5763e+00 | span=4.4906e+00
+shift | mean=4.780328 | std=0.0000e+00 | span=0.0000e+00
+cond(Ψ_stable) | first=1.1454e+01 | mean=2.4710e+01 | max=1.3937e+02
+trace(E_L).real | mean=-1.19997112 | std=6.2879e-01 | span=2.7602e+00
+trace(E_L).imag | mean=-0.00819374 | std=1.0977e-01 | span=1.2052e+00
+E_L_mean diagnostics | herm_error=1.2574e+00 | imag_norm=7.0933e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0703 | dlog_std_norm=8.9585e+01 | dlog_mean_norm=3.3849e+02 | dlog_std_ratio=2.6466e-01
+E0_herm=-1.55031752 | E1_herm=0.34905918
+E0_raw=-0.87727921+0.00136767j | E1_raw=-0.32397913-0.00094303j
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
+[Step   50]
+Loss=-1.60062282 | target=-2.00505776 | gap=+0.40443494
+Grad | raw=1.3266e+00 | update=1.3266e+00 | clipped=1.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=12.333044 | std=3.4682e-01 | span=4.8852e+00
+logΨ.imag | mean=-0.186342 | std=1.5579e+00 | span=5.0077e+00
+shift | mean=7.604028 | std=4.4409e-15 | span=0.0000e+00
+cond(Ψ_stable) | first=1.7163e+01 | mean=1.7163e+01 | max=1.7163e+01
+trace(E_L).real | mean=-1.61251280 | std=1.3323e-15 | span=0.0000e+00
+trace(E_L).imag | mean=-0.00230992 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=1.3050e+00 | imag_norm=2.7518e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=5.8383e-12 | dlog_mean_norm=1.0427e+03 | dlog_std_ratio=5.5994e-15
+E0_herm=-2.19164949 | E1_herm=0.59102667
+E0_raw=-0.96109784+0.00307934j | E1_raw=-0.63952498+0.00031597j
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
+[Step   60]
+Loss=-1.61464432 | target=-2.00505776 | gap=+0.39041344
+Grad | raw=1.8592e-12 | update=1.8592e-12 | clipped=1.8592e-12 | clip_norm=1.00e+00
+logΨ.real | mean=16.065139 | std=7.1054e-15 | span=0.0000e+00
+logΨ.imag | mean=-1.717344 | std=1.5585e+00 | span=3.1416e+00
+shift | mean=8.514556 | std=0.0000e+00 | span=0.0000e+00
+cond(Ψ_stable) | first=2.6221e+00 | mean=2.6221e+00 | max=2.6221e+00
+trace(E_L).real | mean=-1.61464432 | std=2.2204e-16 | span=0.0000e+00
+trace(E_L).imag | mean=0.00001131 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=4.0556e-01 | imag_norm=3.5139e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=6.0220e-12 | dlog_mean_norm=1.1961e+03 | dlog_std_ratio=5.0345e-15
+E0_herm=-1.04067890 | E1_herm=-0.57396542
+E0_raw=-0.96279001+0.00007297j | E1_raw=-0.65185430-0.00006166j
+>>> WARNING: logΨ.real span ≈ 0，疑似 amplitude collapse / gauge plateau
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+#-------------------------------------------------------------------------------
+[Step   70]
+Loss=-1.61464432 | target=-2.00505776 | gap=+0.39041344
+Grad | raw=1.5936e-12 | update=1.5936e-12 | clipped=1.5936e-12 | clip_norm=1.00e+00
+logΨ.real | mean=16.065139 | std=1.7764e-14 | span=0.0000e+00
+logΨ.imag | mean=-1.717344 | std=1.5585e+00 | span=3.1416e+00
+shift | mean=8.514556 | std=3.5527e-15 | span=0.0000e+00
+cond(Ψ_stable) | first=2.6221e+00 | mean=2.6221e+00 | max=2.6221e+00
+trace(E_L).real | mean=-1.61464432 | std=1.1102e-15 | span=0.0000e+00
+trace(E_L).imag | mean=0.00001131 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=4.0556e-01 | imag_norm=3.5139e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=6.2840e-12 | dlog_mean_norm=1.1961e+03 | dlog_std_ratio=5.2536e-15
+E0_herm=-1.04067890 | E1_herm=-0.57396542
+E0_raw=-0.96279001+0.00007297j | E1_raw=-0.65185430-0.00006166j
+>>> WARNING: logΨ.real span ≈ 0，疑似 amplitude collapse / gauge plateau
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+#-------------------------------------------------------------------------------
+[Step   80]
+Loss=-1.61464432 | target=-2.00505776 | gap=+0.39041344
+Grad | raw=0.0000e+00 | update=0.0000e+00 | clipped=0.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=16.065139 | std=2.1316e-14 | span=0.0000e+00
+logΨ.imag | mean=-1.717344 | std=1.5585e+00 | span=3.1416e+00
+shift | mean=8.514556 | std=1.7764e-15 | span=0.0000e+00
+cond(Ψ_stable) | first=2.6221e+00 | mean=2.6221e+00 | max=2.6221e+00
+trace(E_L).real | mean=-1.61464432 | std=1.3323e-15 | span=0.0000e+00
+trace(E_L).imag | mean=0.00001131 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=4.0556e-01 | imag_norm=3.5139e-01 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=6.4560e-12 | dlog_mean_norm=1.1961e+03 | dlog_std_ratio=5.3974e-15
+E0_herm=-1.04067890 | E1_herm=-0.57396542
+E0_raw=-0.96279001+0.00007297j | E1_raw=-0.65185430-0.00006166j
+>>> WARNING: logΨ.real span ≈ 0，疑似 amplitude collapse / gauge plateau
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+#-------------------------------------------------------------------------------
+[Step   90]
+Loss=-0.80735719 | target=-2.00505776 | gap=+1.19770057
+Grad | raw=6.0903e-10 | update=6.0903e-10 | clipped=6.0903e-10 | clip_norm=1.00e+00
+logΨ.real | mean=175.697863 | std=0.0000e+00 | span=0.0000e+00
+logΨ.imag | mean=0.375899 | std=1.5585e+00 | span=3.1416e+00
+shift | mean=167.183167 | std=1.4211e-13 | span=0.0000e+00
+cond(Ψ_stable) | first=8.1066e+68 | mean=8.1066e+68 | max=8.1066e+68
+trace(E_L).real | mean=-0.80735719 | std=5.5511e-16 | span=0.0000e+00
+trace(E_L).imag | mean=0.00002709 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=1.4142e+00 | imag_norm=5.1085e+67 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=3.8369e-09 | dlog_mean_norm=7.8367e+05 | dlog_std_ratio=4.8960e-15
+E0_herm=-62999149653187921914540687591570613459665468880916921658252023824384.00000000 | E1_herm=62999149653187921914540687591570613459665468880916921658252023824384.00000000
+E0_raw=-0.80735719+0.00002709j | E1_raw=0.00000000+0.00000000j
+>>> WARNING: logΨ.real span ≈ 0，疑似 amplitude collapse / gauge plateau
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
+[Step  100]
+Loss=-0.80735719 | target=-2.00505776 | gap=+1.19770057
+Grad | raw=0.0000e+00 | update=0.0000e+00 | clipped=0.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=175.697867 | std=8.5265e-14 | span=0.0000e+00
+logΨ.imag | mean=0.375899 | std=1.5585e+00 | span=3.1416e+00
+shift | mean=167.183171 | std=2.8422e-14 | span=0.0000e+00
+cond(Ψ_stable) | first=8.1067e+68 | mean=8.1067e+68 | max=8.1067e+68
+trace(E_L).real | mean=-0.80735719 | std=0.0000e+00 | span=0.0000e+00
+trace(E_L).imag | mean=0.00002709 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=1.4142e+00 | imag_norm=5.1085e+67 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=3.6447e-09 | dlog_mean_norm=7.8367e+05 | dlog_std_ratio=4.6508e-15
+E0_herm=-62999407378521498411383293736866247315910395959374739263384415371264.00000000 | E1_herm=62999407378521498411383293736866247315910395959374739263384415371264.00000000
+E0_raw=-0.80735719+0.00002709j | E1_raw=0.00000000+0.00000000j
+>>> WARNING: logΨ.real span ≈ 0，疑似 amplitude collapse / gauge plateau
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
+[Step  110]
+Loss=-0.80735719 | target=-2.00505776 | gap=+1.19770057
+Grad | raw=0.0000e+00 | update=0.0000e+00 | clipped=0.0000e+00 | clip_norm=1.00e+00
+logΨ.real | mean=175.697867 | std=8.5265e-14 | span=0.0000e+00
+logΨ.imag | mean=0.375899 | std=1.5585e+00 | span=3.1416e+00
+shift | mean=167.183171 | std=2.8422e-14 | span=0.0000e+00
+cond(Ψ_stable) | first=8.1067e+68 | mean=8.1067e+68 | max=8.1067e+68
+trace(E_L).real | mean=-0.80735719 | std=0.0000e+00 | span=0.0000e+00
+trace(E_L).imag | mean=0.00002709 | std=0.0000e+00 | span=0.0000e+00
+E_L_mean diagnostics | herm_error=1.4142e+00 | imag_norm=5.1085e+67 | valid_ratio=1.0000
+sampler / dlogΨ | unique_ratio=0.0078 | dlog_std_norm=3.6447e-09 | dlog_mean_norm=7.8367e+05 | dlog_std_ratio=4.6508e-15
+E0_herm=-62999407378521498411383293736866247315910395959374739263384415371264.00000000 | E1_herm=62999407378521498411383293736866247315910395959374739263384415371264.00000000
+E0_raw=-0.80735719+0.00002709j | E1_raw=0.00000000+0.00000000j
+>>> WARNING: logΨ.real span ≈ 0，疑似 amplitude collapse / gauge plateau
+>>> WARNING: trace(E_L).real std 很小，covariance 梯度能量项可能无信号
+>>> WARNING: dlogΨ batch variation 很小，参数响应接近常数方向
+>>> WARNING: E_L_mean 非 Hermitian 程度很大，能量诊断不可信
+#-------------------------------------------------------------------------------
