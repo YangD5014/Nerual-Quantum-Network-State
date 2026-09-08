@@ -478,7 +478,7 @@ logger.addHandler(console_handler)
 N_CHAINS = 16
 N_SAMPLES_PER_CHAIN = 200
 SWEEP_SIZE = 300
-N_ITER = 400
+N_ITER = 50
 Natural_Grad = True
 clip_norm = 20.0
 lr = 0.1
@@ -560,6 +560,13 @@ logger.info(
 logger.info(f"理论 Loss 上限：{sum(eigvals[0:K]):.8f} ")
 logger.info(f"超参：clip_norm={clip_norm}, lr={lr}, QGT diag_shift={qgt_diag_shift}, RESET_PERIOD={RESET_PERIOD}")
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+loss_history = []
+steps_history = []
+
 start_time = time.time()
 for step in range(N_ITER):
     # 1. 采样
@@ -622,6 +629,10 @@ for step in range(N_ITER):
     )
     logger.info("#-----------------------------------------#")
 
+    # 记录 Loss 曲线数据（reset 发生在 step+1 边界，曲线上可直接观察回退）
+    loss_history.append(float(jnp.real(loss_mean)))
+    steps_history.append(step)
+
     # 8. 周期性 gauge reset：把 raw L 的列均值吸收进全局 g（双侧规范，物理不变）
     if (step + 1) % RESET_PERIOD == 0:
         new_col_mean = col_mean_fn(total_params, x_batch)   # (K,) 复数：当前列均值
@@ -637,3 +648,18 @@ logger.info(f"训练耗时：{end_time - start_time:.2f} 秒")
 logger.info("\n" + "=" * 60)
 logger.info("训练完成!")
 logger.info("=" * 60)
+
+# ====================== 保存 Loss 曲线图 ======================
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(steps_history, loss_history, marker="o", markersize=3, linewidth=1.2, label="Loss")
+for r in range(RESET_PERIOD, N_ITER + 1, RESET_PERIOD):
+    ax.axvline(r - 0.5, color="red", linestyle="--", alpha=0.6,
+               label="gauge reset" if r == RESET_PERIOD else None)
+ax.set_xlabel("Step")
+ax.set_ylabel("Loss")
+ax.set_title(f"NES-VMC LiH K=4 Loss curve (P8 gauge reset, RESET_PERIOD={RESET_PERIOD})")
+ax.grid(True, alpha=0.3)
+ax.legend()
+fig_path = "./日志/loss_curve_gauge_reset.png"
+fig.savefig(fig_path, dpi=150, bbox_inches="tight")
+logger.info(f"Loss 曲线已保存: {fig_path}")

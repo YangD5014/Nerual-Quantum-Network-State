@@ -1,0 +1,17 @@
+
+============================================================
+开始多链 NES-VMC 训练 (NetKet 自定义采样器 + 自然梯度下降
+============================================================
+基态能量=-1.02613572 Ha| 第一激发态能量=-0.97892204 Ha| 第二激发态能量=-0.66776157 Ha| 第三激发态能量=-0.60817046 Ha
+log_Psi: mean=1.256+0.049j | min=-3.766-2.870j | max=4.520+2.131j
+grad norm before = 2.8485|grad norm after = 93.1715
+Step   0 | Loss: 1.1859970922480094|0st能量=-0.57707749 Ha｜1st能量=-0.08199016 Ha｜2st能量=0.30277483 Ha｜3st能量=1.54228992 Ha
+#-----------------------------------------#
+log_Psi: mean=nan+nanj | min=nan+nanj | max=nan+nanj
+grad norm before = nan|grad norm after = nan
+Step  10 | Loss: nan|0st能量=nan Ha｜1st能量=nan Ha｜2st能量=nan Ha｜3st能量=nan Ha
+#-----------------------------------------#
+log_Psi: mean=nan+nanj | min=nan+nanj | max=nan+nanj
+grad norm before = nan|grad norm after = nan
+Step  20 | Loss: nan|0st能量=nan Ha｜1st能量=nan Ha｜2st能量=nan Ha｜3st能量=nan Ha
+#-----------------------------------------#
