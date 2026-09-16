@@ -68,7 +68,7 @@ n_beta  = 2
 
 # FCI 计算获取激发态参考能量
 cisolver = fci.FCI(mf)
-cisolver.nroots = 6
+cisolver.nroots = 10
 E_fcis, fcivec = cisolver.kernel()
 
 print("\n" + "=" * 60)

@@ -25,7 +25,7 @@ print(f"HF energy = {hf_ground_energy:.8f} Ha")
 print(f"Total electrons = {mol.nelec}")
 print(f"Total basis functions = {mol.nao_nr()}")
 cisolver = fci.FCI(mf)
-cisolver.nroots = 4
+cisolver.nroots = 12
 E_fcis, fcivec = cisolver.kernel()
 print("="*60)
 print("H₂ FCI 基准能量")
