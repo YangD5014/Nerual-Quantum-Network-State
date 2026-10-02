@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自回归采样演示 · MADE 掩码 × 逐位生成</title>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --ink: #1e293b;
+    --muted: #64748b;
+    --blue: #3b82f6;
+    --blue-deep: #1d4ed8;
+    --orange: #f59e0b;
+    --green: #10b981;
+    --red: #ef4444;
+    --violet: #7c3aed;
+    --line: #e2e8f0;
+    --shadow: 0 10px 30px rgba(30, 41, 59, .08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+    background: linear-gradient(160deg, #eef2ff 0%, #f4f6fb 40%, #ecfdf5 100%);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 28px 20px 48px;
+  }
+  header { max-width: 1180px; margin: 0 auto 22px; text-align: center; }
+  header h1 {
+    font-size: 26px; letter-spacing: .5px;
+    background: linear-gradient(90deg, var(--blue-deep), var(--violet), var(--green));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { color: var(--muted); margin-top: 8px; font-size: 14px; line-height: 1.7; }
+  .wrap { max-width: 1180px; margin: 0 auto; display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .card {
+    background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+    padding: 22px 24px 26px; flex: 1 1 480px; min-width: 460px; border: 1px solid var(--line);
+  }
+  .card h2 { font-size: 18px; display: flex; align-items: center; gap: 8px; }
+  .badge {
+    font-size: 12px; font-weight: 600; color: #fff; border-radius: 999px; padding: 3px 10px;
+  }
+  .badge.a { background: linear-gradient(90deg, var(--blue), var(--violet)); }
+  .badge.b { background: linear-gradient(90deg, var(--orange), var(--red)); }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 8px 0 14px; line-height: 1.75; }
+  .btn {
+    border: none; cursor: pointer; font-size: 14px; font-weight: 600; color: #fff;
+    padding: 9px 18px; border-radius: 10px; transition: transform .12s, box-shadow .12s, opacity .12s;
+    font-family: inherit;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(30,41,59,.18); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn.primary { background: linear-gradient(135deg, var(--blue-deep), var(--blue)); }
+  .btn.ghost { background: #fff; color: var(--blue-deep); border: 1.5px solid var(--blue); }
+  .btn.warn { background: linear-gradient(135deg, #dc2626, #f87171); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  svg text { font-family: inherit; }
+
+  /* ---- 左卡：掩码 ---- */
+  #maskSvg { width: 100%; height: auto; display: block; background: #fafcff; border: 1px dashed var(--line); border-radius: 12px; }
+  .legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .matrix { margin-top: 16px; }
+  .matrix h3 { font-size: 14px; margin-bottom: 8px; }
+  .mgrid { display: grid; grid-template-columns: 92px repeat(4, 56px); gap: 4px; justify-content: center; }
+  .mhead { font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: center; text-align: center; min-height: 34px; line-height: 1.3; }
+  .mrowhead { font-size: 12px; color: var(--muted); display: flex; align-items: center; padding-right: 6px; justify-content: flex-end; text-align: right; line-height: 1.3; }
+  .mcell {
+    height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+  }
+  .mcell.ok { background: #d1fae5; color: #065f46; }
+  .mcell.cut { background: #fee2e2; color: #b91c1c; background-image: linear-gradient(135deg, transparent 46%, #fca5a5 46%, #fca5a5 54%, transparent 54%); }
+
+  /* ---- 右卡：采样 ---- */
+  .bits { display: flex; gap: 10px; justify-content: center; margin: 18px 0 6px; }
+  .bit {
+    width: 52px; height: 62px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; color: #94a3b8; background: #f1f5f9; border: 2px solid #e2e8f0;
+    transition: all .25s;
+  }
+  .bit.cur { border-color: var(--violet); box-shadow: 0 0 0 4px rgba(124, 58, 237, .15); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 4px rgba(124,58,237,.15);} 50% { box-shadow: 0 0 0 8px rgba(124,58,237,.08);} }
+  .bit.one { background: linear-gradient(160deg, #fbbf24, #f59e0b); border-color: #d97706; color: #fff; }
+  .bit.zero { background: linear-gradient(160deg, #60a5fa, #3b82f6); border-color: #2563eb; color: #fff; }
+  .bit-tag { text-align: center; font-size: 12px; color: var(--muted); display: flex; gap: 10px; justify-content: center; }
+  .bit-tag b { width: 52px; display: inline-block; }
+  .prow { margin: 16px auto 4px; max-width: 430px; }
+  .prow .plabel { font-size: 13px; color: var(--ink); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .pbar-track { height: 18px; background: #eef2ff; border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+  .pbar-fill { height: 100%; width: 50%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--violet)); transition: width .5s cubic-bezier(.22,1,.36,1); }
+  .pbar-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; }
+  #log {
+    margin-top: 14px; background: #0f172a; color: #cbd5e1; border-radius: 12px; padding: 12px 14px;
+    font-size: 12.5px; font-family: "SF Mono", Menlo, Consolas, monospace; height: 148px; overflow-y: auto; line-height: 1.85;
+  }
+  #log .hi { color: #fbbf24; } #log .ok { color: #34d399; }
+  #verdict {
+    margin-top: 12px; padding: 12px 14px; border-radius: 12px; font-size: 14px; font-weight: 600; display: none;
+  }
+  #verdict.modeA { display: block; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  #verdict.modeB { display: block; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+  #verdict.mixed { display: block; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+  .tally { margin-top: 14px; }
+  .tally h3 { font-size: 14px; margin-bottom: 8px; }
+  .tally-row { display: flex; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 7px; }
+  .tally-name { width: 168px; color: var(--muted); }
+  .tally-track { flex: 1; height: 14px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+  .tally-fill { height: 100%; width: 0; border-radius: 999px; transition: width .4s; }
+  .tally-num { width: 34px; text-align: right; font-weight: 700; }
+  footer { max-width: 1180px; margin: 26px auto 0; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>自回归神经网络：掩码因果 × 逐位采样</h1>
+  <p>左：MADE 的随机掩码如何把全连接"剪"出自回归因果结构（输出 i 只看 mask &lt; i）。<br>
+     右：ARDirectSampler 式逐位生成——每一步只问一个问题："当前条件下，下一位取 1 的概率是多少？"</p>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ 左卡：MADE 掩码可视化 ============ -->
+  <section class="card">
+    <h2><span class="badge a">内容一</span>MADE 掩码连接结构（4 输入 × 4 隐藏 × 4 输出）</h2>
+    <p class="sub">
+      每个单元被分配一个 <b>mask 值</b>：输入的 mask 是 1–4 的随机排列，隐藏单元取 1–3 的随机值。
+      连接规则只有两条：<b>隐藏 u ← 输入 k 仅当 mask(k) ≤ mask(u)</b>；<b>输出 i ← 隐藏 u 仅当 mask(u) &lt; i</b>。
+      于是输出 x̂ᵢ 永远见不到 xᵢ 自己——这就是"上三角被剪断"的因果结构。
+    </p>
+    <svg id="maskSvg" viewBox="0 0 600 316"></svg>
+    <div class="legend">
+      <span><span class="dot" style="background:#10b981"></span>保留的连接</span>
+      <span><span class="dot" style="background:#fecaca"></span>被掩码剪断的连接（虚线）</span>
+      <span>输入按 mask 值排序显示，剪断区恰好构成"上三角"</span>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="btnRemask">🎲 换一组随机掩码</button>
+      <button class="btn ghost" id="btnCut">显示被剪断的连接</button>
+      <span id="maskRead" style="font-size:12.5px;color:var(--muted)"></span>
+    </div>
+    <div class="matrix">
+      <h3>输出 × 输入 等效视野矩阵（沿任意隐藏单元传递后的最终可见性）</h3>
+      <div class="mgrid" id="mgrid"></div>
+    </div>
+  </section>
+
+  <!-- ============ 右卡：逐位采样动画 ============ -->
+  <section class="card">
+    <h2><span class="badge b">内容二</span>6-bit 逐位生成动画（玩具双峰分布）</h2>
+    <p class="sub">
+      内置的玩具分布由条件概率表定义：<b>P(x₁=1)=0.5</b>；其后每一位：
+      <b>P(xᵢ=1 | x₁=1)=0.9</b>，<b>P(xᵢ=1 | x₁=0)=0.1</b>。
+      首位选中哪个"域"，后面就强烈倾向全 1 或全 0——分布因此呈<b>双峰</b>（接近 111111 与 000000）。
+      这正是 ARDirectSampler 每一步做的事：只算一个条件概率，抽一次随机数。
+    </p>
+    <div class="bits" id="bits"></div>
+    <div class="bit-tag" id="bitTags"></div>
+    <div class="prow">
+      <div class="plabel"><span id="pLabel">等待开始…</span><b id="pValue">—</b></div>
+      <div class="pbar-track"><div class="pbar-fill" id="pFill" style="width:50%"></div></div>
+      <div class="pbar-scale"><span>0（必取 0）</span><span>0.5</span><span>1（必取 1）</span></div>
+    </div>
+    <div id="verdict"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="btnSample">▶ 开始采样</button>
+      <button class="btn ghost" id="btnReset">重置位串</button>
+      <button class="btn warn" id="btnClear" style="background:linear-gradient(135deg,#64748b,#94a3b8)">清空统计</button>
+      <label style="font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px">
+        速度 <input type="range" id="speed" min="200" max="1200" step="100" value="700" style="width:110px">
+      </label>
+    </div>
+    <div id="log"><span style="color:#64748b">[日志] 点击「开始采样」，逐位生成一个 6-bit 样本…</span></div>
+    <div class="tally">
+      <h3>多次采样的落点统计（验证双峰）</h3>
+      <div class="tally-row"><span class="tally-name">模式 A · 趋近 111111（首位=1）</span>
+        <div class="tally-track"><div class="tally-fill" id="barA" style="background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+        <span class="tally-num" id="numA">0</span></div>
+      <div class="tally-row"><span class="tally-name">模式 B · 趋近 000000（首位=0）</span>
+        <div class="tally-track"><div class="tally-fill" id="barB" style="background:linear-gradient(90deg,#3b82f6,#60a5fa)"></div></div>
+        <span class="tally-num" id="numB">0</span></div>
+      <div class="tally-row"><span class="tally-name">含翻转位（偏离所在模式）</span>
+        <div class="tally-track"><div class="tally-fill" id="barM" style="background:linear-gradient(90deg,#64748b,#94a3b8)"></div></div>
+        <span class="tally-num" id="numM">0</span></div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  对应课程：《自回归神经网络》02 课（MADE 掩码）与 05 课（NetKet ARNNDense + ARDirectSampler）。<br>
+  提示：左侧多次「换一组随机掩码」后观察——无论掩码怎么随机，视野矩阵的绿色区域永远是下三角。
+</footer>
+
+<script>
+/* ==================================================================
+ * 内容一：MADE 掩码可视化
+ * ================================================================== */
+const N = 4;
+const svg = document.getElementById('maskSvg');
+const mgrid = document.getElementById('mgrid');
+const maskRead = document.getElementById('maskRead');
+let masks = null;          // { inPerm:[...], hid:[...] }
+let showCut = false;
+
+function randInt(n) { return Math.floor(Math.random() * n); }
+function shuffled(arr) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = randInt(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function newMasks() {
+  masks = { inPerm: shuffled([1, 2, 3, 4]), hid: [1 + randInt(3), 1 + randInt(3), 1 + randInt(3), 1 + randInt(3)] };
+  draw();
+}
+
+/* 输入显示顺序按 mask 值排序：mask=1 的输入排最上 */
+function orderInfo() {
+  const idx = [0, 1, 2, 3].sort((a, b) => masks.inPerm[a] - masks.inPerm[b]); // 显示序 r → 原始下标
+  return idx.map((orig, rank) => ({ orig, mask: masks.inPerm[orig], rank }));
+}
+
+const COL = { in: 110, hid: 300, out: 490 };
+function yAt(r) { return 44 + r * 76; }
+
+function nodeSvg(x, y, label, sub, fill, stroke) {
+  return `
+    <circle cx="${x}" cy="${y}" r="20" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
+    <text x="${x}" y="${y + 5}" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">${label}</text>
+    <text x="${x}" y="${y + 38}" text-anchor="middle" font-size="11" fill="#64748b">${sub}</text>`;
+}
+
+function edge(x1, y1, x2, y2, cls) {
+  const mx = (x1 + x2) / 2;
+  return `<path class="${cls}" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none"/>`;
+}
+
+function draw() {
+  const info = orderInfo();
+  const style = `
+    <style>
+      .ok { stroke:#10b981; stroke-width:2; opacity:.6; }
+      .cut { stroke:#ef4444; stroke-width:1.6; opacity:.75; stroke-dasharray:5 4; }
+      .off { stroke:#cbd5e1; stroke-width:1.2; opacity:.35; stroke-dasharray:2 4; }
+    </style>`;
+  let s = style;
+
+  /* 连接线：隐藏 ← 输入（mask(k) <= mask(u)） */
+  info.forEach(f => {
+    for (let u = 0; u < N; u++) {
+      const allow = f.mask <= masks.hid[u];
+      const cls = allow ? 'ok' : 'off';
+      s += edge(COL.in, yAt(f.rank), COL.hid, yAt(u), cls);
+    }
+  });
+  /* 连接线：输出 i ← 隐藏（mask(u) < i，i 为 1..4 的输出编号） */
+  for (let u = 0; u < N; u++) {
+    for (let i = 1; i <= N; i++) {
+      const allow = masks.hid[u] < i;
+      s += edge(COL.hid, yAt(u), COL.out, yAt(i - 1), allow ? 'ok' : (showCut ? 'cut' : 'off'));
+    }
+  }
+
+  /* 输入节点（按 mask 排序显示） */
+  info.forEach(f => {
+    s += nodeSvg(COL.in, yAt(f.rank), `m=${f.mask}`, `输入 x${f.orig + 1}`, '#3b82f6', '#1d4ed8');
+  });
+  /* 隐藏节点 */
+  for (let u = 0; u < N; u++) {
+    s += nodeSvg(COL.hid, yAt(u), `m=${masks.hid[u]}`, `隐藏 h${u + 1}`, '#7c3aed', '#5b21b6');
+  }
+  /* 输出节点 */
+  for (let i = 1; i <= N; i++) {
+    s += nodeSvg(COL.out, yAt(i - 1), `x̂${i}`, `预测 x${i}`, '#f59e0b', '#d97706');
+  }
+  /* 列标题 */
+  s += `<text x="${COL.in}" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">输入（按 mask 排序）</text>`;
+  s += `<text x="${COL.hid}" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">隐藏单元（mask 1–3）</text>`;
+  s += `<text x="${COL.out}" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">输出（逐位条件概率）</text>`;
+  /* 剪断区标注 */
+  s += `<text x="${COL.out}" y="${yAt(0) - 30}" text-anchor="middle" font-size="11" fill="#ef4444">${showCut ? '↑ x̂₁ 无任何输入连接（只能靠自身偏置给出 P(x₁)）' : ''}</text>`;
+
+  svg.innerHTML = s;
+  maskRead.textContent = `输入 mask 排列：[${masks.inPerm.join(', ')}]　隐藏 mask：[${masks.hid.join(', ')}]`;
+  drawMatrix(info);
+}
+
+/* 等效视野矩阵：输出 i 可见输入 j ⇔ ∃u: mask(j) <= mask(u) < i（输入按 mask 排序 → 下三角） */
+function drawMatrix(info) {
+  let html = `<div class="mhead"></div>` +
+    info.map(f => `<div class="mhead">x${f.orig + 1}<br>(mask=${f.mask})</div>`).join('');
+  for (let i = 1; i <= N; i++) {
+    html += `<div class="mrowhead">输出 x̂${i}<br>预测 x${i}</div>`;
+    info.forEach(f => {
+      const visible = masks.hid.some(m => f.mask <= m && m < i);
+      html += visible
+        ? `<div class="mcell ok">可见</div>`
+        : `<div class="mcell cut">剪断</div>`;
+    });
+  }
+  mgrid.innerHTML = html;
+}
+
+document.getElementById('btnRemask').addEventListener('click', newMasks);
+document.getElementById('btnCut').addEventListener('click', function () {
+  showCut = !showCut;
+  this.textContent = showCut ? '隐藏被剪断的连接' : '显示被剪断的连接';
+  draw();
+});
+newMasks();
+
+/* ==================================================================
+ * 内容二：6-bit 逐位采样动画
+ * ================================================================== */
+const LEN = 6;
+const bitsEl = document.getElementById('bits');
+const tagsEl = document.getElementById('bitTags');
+const pFill = document.getElementById('pFill');
+const pLabel = document.getElementById('pLabel');
+const pValue = document.getElementById('pValue');
+const logEl = document.getElementById('log');
+const verdictEl = document.getElementById('verdict');
+const btnSample = document.getElementById('btnSample');
+const btnReset = document.getElementById('btnReset');
+const btnClear = document.getElementById('btnClear');
+const speedEl = document.getElementById('speed');
+
+let bits = Array(LEN).fill(null);
+let running = false;
+let timer = null;
+const tally = { A: 0, B: 0, mixed: 0, total: 0 };
+
+/* 玩具双峰分布的条件概率：首位 0.5；之后跟随意向，0.9 / 0.1 */
+function condProb(i) { // i: 0-based 即将生成第 i 位（i>=1 时前缀已定）
+  if (i === 0) return 0.5;
+  return bits[0] === 1 ? 0.9 : 0.1;
+}
+
+function renderBits(curIdx) {
+  bitsEl.innerHTML = '';
+  tagsEl.innerHTML = '';
+  for (let i = 0; i < LEN; i++) {
+    const d = document.createElement('div');
+    d.className = 'bit' + (bits[i] === 1 ? ' one' : bits[i] === 0 ? ' zero' : '') + (i === curIdx ? ' cur' : '');
+    d.textContent = bits[i] === 1 ? '1' : bits[i] === 0 ? '0' : '?';
+    bitsEl.appendChild(d);
+    const t = document.createElement('b');
+    t.textContent = 'x' + (i + 1);
+    tagsEl.appendChild(t);
+  }
+}
+
+function logLine(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderTally() {
+  const n = Math.max(tally.total, 1);
+  document.getElementById('barA').style.width = (tally.A / n * 100) + '%';
+  document.getElementById('barB').style.width = (tally.B / n * 100) + '%';
+  document.getElementById('barM').style.width = (tally.mixed / n * 100) + '%';
+  document.getElementById('numA').textContent = tally.A;
+  document.getElementById('numB').textContent = tally.B;
+  document.getElementById('numM').textContent = tally.mixed;
+}
+
+function setBar(p, label) {
+  pFill.style.width = (p * 100) + '%';
+  pLabel.textContent = label;
+  pValue.textContent = p.toFixed(2);
+}
+
+function finish() {
+  const ones = bits.reduce((a, b) => a + (b === 1 ? 1 : 0), 0);
+  const mode = bits[0] === 1 ? 'A' : 'B';
+  const flips = mode === 'A' ? LEN - ones : ones;
+  tally.total += 1;
+  if (flips === 0) { tally[mode === 'A' ? 'A' : 'B'] += 1; }
+  else { tally.mixed += 1; }
+  renderTally();
+
+  verdictEl.className = mode === 'A' ? 'modeA' : 'modeB';
+  verdictEl.style.display = '';
+  if (flips === 0) {
+    verdictEl.textContent = mode === 'A'
+      ? '✔ 完美落入模式 A：111111（首位抽到 1 后，后续每位都以 0.9 的概率跟随）'
+      : '✔ 完美落入模式 B：000000（首位抽到 0 后，后续每位都以 0.9 的概率取 0）';
+    logLine(`<span class="ok">✔ 样本 ${bits.join('')} → 模式 ${mode}（0 个翻转）</span>`);
+  } else {
+    verdictEl.className = 'mixed';
+    verdictEl.textContent = `落在模式 ${mode} 附近，含 ${flips} 个翻转位（分布的双峰主体 + 少量涨落）。`;
+    logLine(`样本 ${bits.join('')} → 模式 ${mode} 附近（${flips} 个翻转）`);
+  }
+  running = false;
+  btnSample.disabled = false;
+  btnSample.textContent = '▶ 再采一个';
+}
+
+function step(i) {
+  if (i >= LEN) { finish(); return; }
+  const p = condProb(i);
+  const v = Math.random() < p ? 1 : 0;
+  bits[i] = v;
+  renderBits(i);
+  setBar(p, i === 0 ? 'P(x₁ = 1)　（无条件，分布的"分岔点"）' : `P(x${i + 1} = 1 | x₁..x${i})　（首位=${bits[0]} → 强烈倾向 ${bits[0] ? '全 1' : '全 0'}）`);
+  logLine(`第 ${i + 1} 位：P(=1) = <span class="hi">${p.toFixed(2)}</span> → 抽到 <b>${v}</b>`);
+  timer = setTimeout(() => step(i + 1), +speedEl.value);
+}
+
+btnSample.addEventListener('click', () => {
+  if (running) return;
+  running = true;
+  btnSample.disabled = true;
+  bits = Array(LEN).fill(null);
+  renderBits(-1);
+  verdictEl.className = '';
+  verdictEl.style.display = 'none';
+  logLine(`<span style="color:#818cf8">—— 新的采样开始 ——</span>`);
+  step(0);
+});
+
+btnReset.addEventListener('click', () => {
+  if (timer) clearTimeout(timer);
+  running = false;
+  btnSample.disabled = false;
+  btnSample.textContent = '▶ 开始采样';
+  bits = Array(LEN).fill(null);
+  renderBits(-1);
+  setBar(0.5, '等待开始…');
+  verdictEl.className = '';
+  verdictEl.style.display = '';
+});
+
+btnClear.addEventListener('click', () => {
+  tally.A = tally.B = tally.mixed = tally.total = 0;
+  renderTally();
+  logEl.innerHTML = '<span style="color:#64748b">[日志] 统计已清空。</span>';
+});
+
+renderBits(-1);
+renderTally();
+</script>
+</body>
+</html>
