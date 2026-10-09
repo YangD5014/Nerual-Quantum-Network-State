@@ -10,7 +10,7 @@ import itertools
 
 bond_length = 1.8
 geometry = [
-    ("He", (0.0, 0.0, bond_length))
+    ("Li", (0.0, 0.0, bond_length))
 ]
 
 mol = gto.M(atom=geometry, basis="cc-pVDZ", verbose=0, spin=0)

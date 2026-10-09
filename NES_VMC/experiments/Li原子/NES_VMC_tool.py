@@ -1,15 +1,16 @@
 import logging
 import os
 import time
-
 import pickle
-
+import numpy as np
 import jax
 import jax.numpy as jnp
 import flax.nnx as nnx
 import netket as nk
 import optax
 from scipy.sparse.linalg import eigsh
+from scipy.linalg import eigh as scipy_eigh
+from jax.flatten_util import ravel_pytree
 
 from NES_VMC_V1 import (
     NESTotalAnsatz_stable,
@@ -424,3 +425,158 @@ def make_gauge_fn(total_model, ref_state):
         return jnp.mean(jax.vmap(_offset)(x_batch), axis=0)
 
     return gauge_fn, col_mean_fn
+
+
+# ====================== 基于 MCMC 样本的能级→列映射（M、S、v 全 K×K）======================
+def make_MS_estimator_fn(ha, single_machine_list):
+    """构造（jit 编译的）样本统计器：输入 (total_params, x_batch)，输出 K×K 的 M̂、Ŝ 与有效掩码。
+
+    每 walker 构造（全程 K×K，不触碰完整 n_states×n_states 的 H，不做精确对角化）：
+        P_{nαβ}    = ψ_β(x_{nα})       —— β 列拟设算到该 walker 的 K 个副本构型上
+        (HP)_{nαβ} = (Hψ_β)(x_{nα})    —— 局部能量算子 Ham_Psi_scaled 作用在被采样构型上
+    逐 walker 按 Frobenius 范数归一化（P、HP 同乘公共标度，不改变广义本征值），
+    再做样本平均（并强制 Hermitian）：
+        Ŝ = mean_n P_n† P_n ,   M̂ = mean_n P_n† (HP)_n
+
+    返回的 estimator: jitted (total_params, x_batch) -> (Mhat (K,K), Shat (K,K), finite (N,))
+    广义本征问题 M v = λ S v 由 compute_lam_v_from_samples 完成本函数不负责。
+    """
+    K_ = len(single_machine_list)
+
+    def _estimate(total_params, x_batch):
+        # ---- 1) 单 walker 的 K×K 阵 P：逐列拟设算到 (N, K, n_spin) 的副本构型 ----
+        logP_cols = [
+            single_machine_list[j](total_params["single_ansatz_list"][j], x_batch)
+            for j in range(K_)
+        ]
+        logP = jnp.stack(logP_cols, axis=-1)                    # (N, α, β)
+        shift_n = jnp.max(logP.real, axis=(1, 2)).reshape(-1)   # 每 walker 公共安全标度
+        P = jnp.exp(logP - shift_n.reshape(-1, 1, 1))           # (N, K, K)
+
+        # ---- 2) H·ψ：局部能量算子作用到被采样构型（不构造完整 H 矩阵）----
+        HP = Ham_Psi_scaled(
+            ha=ha,
+            single_machine_list=single_machine_list,
+            total_params=total_params,
+            x=x_batch,
+            shift=shift_n,
+        )                                                       # (N, K, K)
+
+        # ---- 3) 有效性掩码 + 逐 walker Frobenius 归一化 ----
+        finite = (
+            jnp.all(jnp.isfinite(P), axis=(-2, -1))
+            & jnp.all(jnp.isfinite(HP), axis=(-2, -1))
+        )
+        Pn = jnp.where(finite.reshape(-1, 1, 1), P, 0.0)
+        HPn = jnp.where(finite.reshape(-1, 1, 1), HP, 0.0)
+        norm = jnp.sqrt(jnp.sum(jnp.abs(Pn) ** 2, axis=(1, 2)) + 1e-30).reshape(-1, 1, 1)
+        Pn = Pn / norm
+        HPn = HPn / norm
+
+        # ---- 4) 样本平均 → Ŝ、M̂（K×K，强制 Hermitian 消浮点误差）----
+        N_eff = jnp.maximum(jnp.sum(finite.astype(jnp.float32)), 1.0)
+        Shat = jnp.einsum("nai,naj->ij", jnp.conj(Pn), Pn).astype(jnp.complex128) / N_eff
+        Mhat = jnp.einsum("nai,naj->ij", jnp.conj(Pn), HPn).astype(jnp.complex128) / N_eff
+        Shat = 0.5 * (Shat + jnp.conj(Shat.T))
+        Mhat = 0.5 * (Mhat + jnp.conj(Mhat.T))
+        return Mhat, Shat, finite
+
+    return jax.jit(_estimate)
+
+
+def compute_lam_v_from_samples(
+    ha,
+    single_machine_list,
+    total_params,
+    x_batch,
+    return_MS=False,
+    estimator=None,
+):
+    """基于 MCMC 样本计算广义本征值 λ 与旋转矩阵 v（M、S、v 全部 K×K）。
+
+    在 K 列张成的子空间上解广义本征问题  M v = λ S v：
+        M_{ij} = ⟨ψ_i | H | ψ_j⟩ ,  S_{ij} = ⟨ψ_i | ψ_j⟩   （均由样本估计，K×K）
+    旋转后第 k 列（能量升序）即第 k 个本征态：
+        φ_k = Σ_j ψ_j v[k, j]
+    能级 i 对应的「主动列」= argmax_j |v[i, j]|（见 level_to_active_col，分层冻结用）。
+
+    参数
+    ----
+    ha                  : NetKet 哈密顿量（供局部能量算子 Ham_Psi_scaled 使用）
+    single_machine_list : 长度 K 的 gauge-fixed 单列 machine 列表（与训练一致，
+                          create_single_machine_gauge_fixed(ansatz, ref)[0]）
+    total_params        : 总参数 pytree（含 'single_ansatz_list'）
+    x_batch             : (N, K, n_spin) 整数 walker 构型
+                          （nes_sampler 样本 reshape(-1, K, n_spin) 而来）
+    return_MS           : True 时同时返回 (Mhat, Shat)
+    estimator           : 可选，预先构造好的 make_MS_estimator_fn 返回值。
+                          训练循环中反复调用时传入它可避免每次重编译。
+
+    返回
+    ----
+    lam     : (K,) float64，广义本征值（能量升序）
+    v       : (K, K) complex，旋转系数（列按能量升序排列）
+    n_valid : 参与统计的有效 walker 数
+    Mhat, Shat : (K, K) complex（仅 return_MS=True 时返回）
+    """
+    if estimator is None:
+        estimator = make_MS_estimator_fn(ha, single_machine_list)
+    Mhat, Shat, finite = estimator(total_params, x_batch)
+
+    M_np = np.asarray(Mhat)
+    S_np = np.asarray(Shat)
+    lam, v = scipy_eigh(M_np, S_np)             # K×K 复 Hermitian 广义本征问题
+    order = np.argsort(lam.real)                # 能量升序
+    lam, v = lam[order], v[:, order]
+
+    n_valid = int(np.asarray(finite).sum())
+    if return_MS:
+        return lam.real, v, n_valid, M_np, S_np
+    return lam.real, v, n_valid,order
+
+
+def level_to_active_col(v, level):
+    """能级 level 对应的主动列：旋转矩阵第 level 行绝对值最大的列。
+
+    v: (K, K)，行 = 能级（能量升序），列 = 原始列。
+    返回 int 列下标 j，使 |v[level, j]| 最大 —— 该列即与能级 level 最"对齐"的原始列，
+    作为分层冻结时 stop_gradient 的目标列。
+    """
+    return int(np.argmax(np.abs(np.asarray(v)[level])))
+
+
+
+
+
+
+def clip_by_per_param_norm(max_per_param_norm: float):
+    """
+    自定义Optax变换：按【每参数平均L2幅值】做全局缩放裁剪
+    per_param_norm = ||g||_2 / sqrt(num_params)
+    当 per_param_norm > max_per_param_norm，整体梯度等比缩放，保持梯度方向不变
+    兼容复数梯度、任意pytree结构。
+    """
+
+    def init_fn(params):
+        # 本变换无状态，返回空state
+        return optax.EmptyState()
+
+    def update_fn(updates, state, params=None):
+        # updates: 梯度pytree
+        grad_flat, _ = ravel_pytree(updates)
+        n_params = grad_flat.size
+        global_l2 = jnp.linalg.norm(grad_flat)
+        per_param_norm = global_l2 / jnp.sqrt(n_params)
+
+        # 计算缩放系数
+        scale = jnp.where(
+            per_param_norm > max_per_param_norm,
+            max_per_param_norm / per_param_norm,
+            1.0
+        )
+        # pytree全部叶子乘以scale
+        updates_clipped = jax.tree.map(lambda arr: arr * scale, updates)
+        return updates_clipped, state
+
+    return optax.GradientTransformation(init_fn, update_fn)
+

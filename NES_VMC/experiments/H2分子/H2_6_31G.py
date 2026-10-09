@@ -6,8 +6,6 @@ import jax.numpy as jnp
 import numpy as np
 import itertools
 # ============================================================
-# LiH 分子 / cc-pVDZ / Active Space 基准
-# ============================================================
 bond_length = 1.5
 geometry = [
     ("H", (0.0, 0.0, 0.0)),
