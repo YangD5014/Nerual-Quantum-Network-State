@@ -546,6 +546,101 @@ def level_to_active_col(v, level):
 
 
 
+# ====================== 【修正版】无偏M、S估计器，|Ψ|^2测度 ======================
+def make_MS_unbiased_estimator_fn(ha, single_machine_list):
+    """
+    【无偏版本】基于 MCMC 样本估计 Gram 矩阵
+        S_ij = ⟨ψ_i | ψ_j⟩ , M_ij = ⟨ψ_i | H | ψ_j⟩
+    数学：
+        Ŝ = Σ_n w_n * P_n† P_n / Σ w_n
+        M̂ = Σ_n w_n * P_n† (HP)_n / Σ w_n
+    不再做逐walker Frobenius归一化；使用采样重要性权重 w_n 恢复 |Ψ|² 测度。
+
+    参数：
+        ha: NetKet哈密顿
+        single_machine_list: K个单列ansatz列表
+    返回 jitted estimator:
+        estimator(total_params, x_batch, w_batch) -> (Mhat, Shat, finite_mask)
+            x_batch: (N, K, n_spin) walker构型组
+            w_batch: (N,) 重要性权重，来自NES采样器
+    """
+    K_ = len(single_machine_list)
+
+    def _estimate(total_params, x_batch, w_batch):
+        # ---- 1) 计算 P[n, α, β] = ψ_β(x_{nα}) ----
+        logP_cols = [
+            single_machine_list[j](total_params["single_ansatz_list"][j], x_batch)
+            for j in range(K_)
+        ]
+        logP = jnp.stack(logP_cols, axis=-1)  # (N, K, K)
+        shift_n = jnp.max(logP.real, axis=(1, 2)).reshape(-1)   # per‑walker log‑shift 防exp溢出
+        P = jnp.exp(logP - shift_n.reshape(-1, 1, 1))           # (N, K, K)
+
+        # ---- 2) H作用于各个列拟设 HP[n,α,β] = (Hψ_β)(x_{nα}) ----
+        HP = Ham_Psi_scaled(
+            ha=ha,
+            single_machine_list=single_machine_list,
+            total_params=total_params,
+            x=x_batch,
+            shift=shift_n,
+        )  # (N, K, K)
+
+        # ---- 3) 有限有效性掩码，过滤NaN/Inf样本 ----
+        finite = (
+            jnp.all(jnp.isfinite(P), axis=(-2, -1))
+            & jnp.all(jnp.isfinite(HP), axis=(-2, -1))
+            & jnp.isfinite(w_batch)
+        )
+        # 无效样本置0，权重置0，不参与统计
+        Pn = jnp.where(finite.reshape(-1, 1, 1), P, 0.0)
+        HPn = jnp.where(finite.reshape(-1, 1, 1), HP, 0.0)
+        wn = jnp.where(finite, w_batch, 0.0)  # (N,)
+
+        # ---- 4) 重要性加权平均，得到 M̂、Ŝ；不再做逐walker归一化！ ----
+        sum_w = jnp.maximum(jnp.sum(wn), 1e-30)  # 防止除0
+        Shat = jnp.einsum("n,nai,naj->ij", wn, jnp.conj(Pn), Pn).astype(jnp.complex128) / sum_w
+        Mhat = jnp.einsum("n,nai,naj->ij", wn, jnp.conj(Pn), HPn).astype(jnp.complex128) / sum_w
+
+        # 强制Hermitian，消除浮点引入的微小非厄米噪声
+        Shat = 0.5 * (Shat + jnp.conj(Shat.T))
+        Mhat = 0.5 * (Mhat + jnp.conj(Mhat.T))
+
+        return Mhat, Shat, finite
+
+    return jax.jit(_estimate)
+
+
+def compute_lam_v_from_samples_unbiased(
+    ha,
+    single_machine_list,
+    total_params,
+    x_batch,
+    w_batch,
+    return_MS=False,
+    estimator=None,
+):
+    """
+    【无偏版本】广义本征求解 M v = λ S v
+    参数新增 w_batch: (N,) 采样重要性权重
+    """
+    if estimator is None:
+        estimator = make_MS_unbiased_estimator_fn(ha, single_machine_list)
+
+    Mhat, Shat, finite = estimator(total_params, x_batch, w_batch)
+    M_np = np.asarray(Mhat)
+    S_np = np.asarray(Shat)
+
+    # 广义厄米本征求解
+    lam, v = scipy_eigh(M_np, S_np)
+    order = np.argsort(lam.real)
+    lam, v = lam[order], v[:, order]
+    n_valid = int(np.asarray(finite).sum())
+
+    if return_MS:
+        return lam.real, v, n_valid, M_np, S_np
+    return lam.real, v, n_valid, order
+
+
 
 
 
