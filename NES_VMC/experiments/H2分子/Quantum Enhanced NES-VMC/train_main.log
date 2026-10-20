@@ -1,0 +1,71 @@
+============================================================
+H2 分子基本信息
+============================================================
+HF energy = -0.99749729 Ha
+Total electrons = (1, 1)
+Total basis functions = 4
+============================================================
+H₂ FCI 基准能量
+============================================================
+E0 = -1.05434745 Ha  |  激发能: 0.0000 eV
+E1 = -0.95790573 Ha  |  激发能: 2.6243 eV
+E2 = -0.66895227 Ha  |  激发能: 10.4871 eV
+E3 = -0.55140192 Ha  |  激发能: 13.6859 eV
+E4 = -0.02803278 Ha  |  激发能: 27.9275 eV
+E5 = -0.01450343 Ha  |  激发能: 28.2956 eV
+E6 = -0.00518297 Ha  |  激发能: 28.5492 eV
+E7 = 0.02397075 Ha  |  激发能: 29.3425 eV
+E8 = 0.23432390 Ha  |  激发能: 35.0666 eV
+E9 = 0.25720575 Ha  |  激发能: 35.6892 eV
+E10 = 0.49958128 Ha  |  激发能: 42.2846 eV
+E11 = 0.50024484 Ha  |  激发能: 42.3026 eV
+
+HF reference state: [0 0 0 1 0 0 0 1]
+single_edges: [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3), (4, 5), (4, 6), (4, 7), (5, 6), (5, 7), (6, 7)]
+================================================================
+QE-NES-VMC 训练开始 | H2/6-31G K=4 | FFNN振幅×PQC相位（方案A）
+lr=0.1 diag_shift=0.1 seed=11 n_iter=300 n_chains=16×200 hidden=12 layers=2 tag=_main
+================================================================
+总参数量：1400（K=4 个独立 FFNN+PQC 单态）
+精确 CAS 基准：E0=-1.05434745 E1=-0.95790573 E2=-0.66895227 E3=-0.55140192 | Loss 理论值 ΣE=-3.23260738
+[Step   0] Loss=0.788544 | E0..E3 err(mHa)=511.98/1037.02/942.01/1530.14 | grad raw=3.602 nat=2.578 | valid=1.00 ESS=2174/3200 maxw/avg=4.09 cond(Ψ)=9.6e+00 |g|=0.000
+[Step  10] Loss=-1.789657 | E0..E3 err(mHa)=34.05/443.17/215.85/749.88 | grad raw=4.364 nat=1.732 | valid=1.00 ESS=1463/3200 maxw/avg=5.15 cond(Ψ)=5.8e+01 |g|=2.325
+[Step  20] Loss=-2.904322 | E0..E3 err(mHa)=10.66/94.22/40.49/182.92 | grad raw=5.674 nat=0.808 | valid=1.00 ESS=1024/3200 maxw/avg=4.62 cond(Ψ)=5.6e+01 |g|=5.679
+[Step  30] Loss=-3.170135 | E0..E3 err(mHa)=5.68/13.61/12.77/30.40 | grad raw=0.995 nat=0.431 | valid=1.00 ESS=1102/3200 maxw/avg=3.17 cond(Ψ)=1.1e+02 |g|=7.744
+[Step  40] Loss=-3.199995 | E0..E3 err(mHa)=3.98/7.37/8.19/13.07 | grad raw=0.281 nat=0.252 | valid=1.00 ESS=1308/3200 maxw/avg=2.58 cond(Ψ)=1.2e+03 |g|=8.713
+[Step  50] Loss=-3.204126 | E0..E3 err(mHa)=3.00/5.87/9.90/9.71 | grad raw=0.178 nat=0.183 | valid=1.00 ESS=1384/3200 maxw/avg=2.42 cond(Ψ)=2.9e+02 |g|=9.135
+[Step  60] Loss=-3.207839 | E0..E3 err(mHa)=2.70/5.43/8.89/7.74 | grad raw=0.136 nat=0.137 | valid=1.00 ESS=1454/3200 maxw/avg=2.30 cond(Ψ)=8.2e+01 |g|=9.439
+[Step  70] Loss=-3.209336 | E0..E3 err(mHa)=2.53/4.97/9.23/6.54 | grad raw=0.150 nat=0.151 | valid=1.00 ESS=1343/3200 maxw/avg=2.52 cond(Ψ)=1.3e+02 |g|=9.645
+[Step  80] Loss=-3.211013 | E0..E3 err(mHa)=2.49/4.90/8.22/5.98 | grad raw=0.191 nat=0.129 | valid=1.00 ESS=1295/3200 maxw/avg=2.61 cond(Ψ)=1.8e+02 |g|=9.744
+[Step  90] Loss=-3.211715 | E0..E3 err(mHa)=3.96/4.29/8.44/4.20 | grad raw=0.230 nat=0.162 | valid=1.00 ESS=1149/3200 maxw/avg=2.98 cond(Ψ)=8.8e+01 |g|=9.664
+[Step 100] Loss=-3.214485 | E0..E3 err(mHa)=3.15/3.06/7.38/4.53 | grad raw=0.152 nat=0.098 | valid=1.00 ESS=1333/3200 maxw/avg=2.53 cond(Ψ)=8.9e+01 |g|=9.740
+[Step 110] Loss=-3.213411 | E0..E3 err(mHa)=3.01/3.32/6.92/5.94 | grad raw=0.281 nat=0.088 | valid=1.00 ESS=1437/3200 maxw/avg=2.34 cond(Ψ)=4.7e+02 |g|=10.032
+[Step 120] Loss=-3.215579 | E0..E3 err(mHa)=3.99/2.67/6.74/3.62 | grad raw=0.290 nat=0.125 | valid=1.00 ESS=1150/3200 maxw/avg=2.98 cond(Ψ)=1.1e+02 |g|=10.237
+[Step 130] Loss=-3.215493 | E0..E3 err(mHa)=3.43/2.58/6.03/5.07 | grad raw=0.215 nat=0.067 | valid=1.00 ESS=1416/3200 maxw/avg=2.37 cond(Ψ)=1.1e+02 |g|=10.209
+[Step 140] Loss=-3.215529 | E0..E3 err(mHa)=4.80/2.21/5.94/4.13 | grad raw=0.254 nat=0.087 | valid=1.00 ESS=1364/3200 maxw/avg=2.47 cond(Ψ)=2.4e+02 |g|=10.380
+[Step 150] Loss=-3.216780 | E0..E3 err(mHa)=4.01/2.19/5.03/4.60 | grad raw=0.340 nat=0.085 | valid=1.00 ESS=1432/3200 maxw/avg=2.34 cond(Ψ)=2.0e+02 |g|=10.641
+[Step 160] Loss=-3.217008 | E0..E3 err(mHa)=5.14/2.28/5.37/2.82 | grad raw=0.424 nat=0.082 | valid=1.00 ESS=1446/3200 maxw/avg=2.32 cond(Ψ)=1.8e+03 |g|=10.612
+[Step 170] Loss=-3.216390 | E0..E3 err(mHa)=5.24/1.86/5.50/3.62 | grad raw=0.158 nat=0.087 | valid=1.00 ESS=1317/3200 maxw/avg=2.58 cond(Ψ)=2.6e+02 |g|=10.672
+[Step 180] Loss=-3.217270 | E0..E3 err(mHa)=5.25/1.71/4.98/3.40 | grad raw=0.404 nat=0.081 | valid=1.00 ESS=1298/3200 maxw/avg=2.62 cond(Ψ)=2.0e+02 |g|=10.736
+[Step 190] Loss=-3.217582 | E0..E3 err(mHa)=4.57/1.75/4.55/4.16 | grad raw=0.221 nat=0.067 | valid=1.00 ESS=1344/3200 maxw/avg=2.50 cond(Ψ)=2.7e+02 |g|=10.850
+[Step 200] Loss=-3.218481 | E0..E3 err(mHa)=5.15/1.54/4.06/3.37 | grad raw=0.627 nat=0.066 | valid=1.00 ESS=1302/3200 maxw/avg=2.60 cond(Ψ)=2.6e+02 |g|=10.849
+[Step 210] Loss=-3.218922 | E0..E3 err(mHa)=5.09/1.51/4.00/3.10 | grad raw=0.276 nat=0.084 | valid=1.00 ESS=1317/3200 maxw/avg=2.57 cond(Ψ)=3.2e+02 |g|=11.157
+[Step 220] Loss=-3.220078 | E0..E3 err(mHa)=4.42/1.45/3.13/3.53 | grad raw=0.892 nat=0.078 | valid=1.00 ESS=1358/3200 maxw/avg=2.50 cond(Ψ)=1.1e+03 |g|=11.054
+[Step 230] Loss=-3.218979 | E0..E3 err(mHa)=4.71/1.75/4.04/3.12 | grad raw=0.615 nat=0.055 | valid=1.00 ESS=1432/3200 maxw/avg=2.35 cond(Ψ)=6.9e+02 |g|=11.297
+[Step 240] Loss=-3.219831 | E0..E3 err(mHa)=6.29/1.51/2.88/2.10 | grad raw=0.465 nat=0.069 | valid=1.00 ESS=1227/3200 maxw/avg=2.79 cond(Ψ)=3.0e+02 |g|=11.428
+[Step 250] Loss=-3.220067 | E0..E3 err(mHa)=5.52/1.30/2.43/3.28 | grad raw=0.475 nat=0.081 | valid=1.00 ESS=1346/3200 maxw/avg=2.51 cond(Ψ)=3.1e+02 |g|=11.277
+[Step 260] Loss=-3.219216 | E0..E3 err(mHa)=5.99/1.43/3.49/2.48 | grad raw=0.661 nat=0.071 | valid=1.00 ESS=1298/3200 maxw/avg=2.62 cond(Ψ)=5.1e+02 |g|=11.426
+[Step 270] Loss=-3.220331 | E0..E3 err(mHa)=5.88/1.56/2.59/2.24 | grad raw=0.439 nat=0.053 | valid=1.00 ESS=1365/3200 maxw/avg=2.48 cond(Ψ)=9.2e+02 |g|=11.500
+[Step 280] Loss=-3.219964 | E0..E3 err(mHa)=6.41/1.54/2.49/2.20 | grad raw=0.619 nat=0.070 | valid=1.00 ESS=1437/3200 maxw/avg=2.34 cond(Ψ)=7.2e+02 |g|=11.501
+[Step 290] Loss=-3.219559 | E0..E3 err(mHa)=6.13/1.32/2.46/3.15 | grad raw=0.553 nat=0.068 | valid=1.00 ESS=1286/3200 maxw/avg=2.65 cond(Ψ)=4.9e+02 |g|=11.712
+[Step 299] Loss=-3.220523 | E0..E3 err(mHa)=6.39/1.50/1.93/2.26 | grad raw=0.337 nat=0.054 | valid=1.00 ESS=1392/3200 maxw/avg=2.44 cond(Ψ)=3.6e+02 |g|=11.712
+================================================================
+训练完成 用时 600.7s（2.00s/步）
+  E0: -1.04795499 Ha  误差 6.392 mHa (FCI -1.05434745)
+  E1: -0.95640354 Ha  误差 1.502 mHa (FCI -0.95790573)
+  E2: -0.66702498 Ha  误差 1.927 mHa (FCI -0.66895227)
+  E3: -0.54913932 Ha  误差 2.263 mHa (FCI -0.55140192)
+  最终 Loss=-3.220523  Σ误差=12.085 mHa
+================================================================
+曲线已保存：/Users/yangjianfei/mac_vscode/神经网络量子态/NES_VMC/experiments/H2分子/Quantum Enhanced NES-VMC/QE_NES_VMC_K4_main.png
+历史/参数已保存：/Users/yangjianfei/mac_vscode/神经网络量子态/NES_VMC/experiments/H2分子/Quantum Enhanced NES-VMC/QE_NES_VMC_K4_main_history.pkl / /Users/yangjianfei/mac_vscode/神经网络量子态/NES_VMC/experiments/H2分子/Quantum Enhanced NES-VMC/QE_NES_VMC_K4_main_params.npz
