@@ -93,12 +93,17 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         sign, logabs = jnp.linalg.slogdet(A)
         return logabs + 1j * jnp.angle(sign)
 
-    def _one_full(p, xw, c, c2, f, g):
-        """单 walker -> (logΨ_F, E_L, valid)。"""
+    def _one_az(p, xw, c, c2, f, g):
+        """单 walker -> (A, Z)：A=Ψ̃−Φ̃c（K×K 振幅矩阵），Z=(HΨ̃−HΦ̃c)−Φ̃c2。"""
         Phi, Psi = _cols(p, xw, f, g)
         Hphi, Hpsi = _h_cols(p, xw, f, g)
         A = Psi - Phi @ c
         Z = (Hpsi - Hphi @ c) - Phi @ c2
+        return A, Z
+
+    def _one_full(p, xw, c, c2, f, g):
+        """单 walker -> (logΨ_F, E_L, valid)。"""
+        A, Z = _one_az(p, xw, c, c2, f, g)
         E_L = jnp.linalg.solve(A, Z)
         sign, logabs = jnp.linalg.slogdet(A)
         log_psi = logabs + 1j * jnp.angle(sign)
@@ -168,10 +173,43 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         im_g = jax.grad(lambda q: jnp.imag(_one_log(q, xw, c, f, g)))(p)
         return jax.tree.map(lambda a, b: a + 1j * b, re_g, im_g)
 
+    def _gram_eig(A, Z, wv, valid):
+        """加权 Gram 广义本征（**正确的能量监控量**）：M v = λ S v。
+
+        S = Σ_n w_n A_n†A_n / Σw,  M = Σ_n w_n A_n†Z_n / Σw,  w ∝ |Ψ_F|。
+        A_n[i,j] = χ_j(x_i)（walker n 的第 i 个组态上第 j 列），故
+        S_{jj'} = Σ_n Σ_i w_n χ_j(x_i)* χ_{j'}(x_i) 即 ⟨χ_j|χ_{j'}⟩ 的 MC 估计。
+        与收尾提取同构、**不出现 A⁻¹** ⇒ 不会像 eig(sym⟨E_L⟩) 那样产生谱扩散偏差。
+        """
+        wsum = jnp.maximum(jnp.sum(wv), 1e-30)
+        mask = valid[:, None, None]
+        A_s = jnp.where(mask, A, 0.0)
+        Z_s = jnp.where(mask, Z, 0.0)
+        S = jnp.einsum("n,nmi,nmj->ij", wv, jnp.conj(A_s), A_s) / wsum
+        M = jnp.einsum("n,nmi,nmj->ij", wv, jnp.conj(A_s), Z_s) / wsum
+        S = 0.5 * (S + jnp.conj(S.T))
+        M = 0.5 * (M + jnp.conj(M.T))
+        jitter = 1e-12 * jnp.maximum(jnp.real(jnp.trace(S)), 1e-30) / K
+        S = S + jitter * jnp.eye(K, dtype=S.dtype)
+        # 广义本征白化：S = L L†，C = L⁻¹ M L⁻†（Hermitian），eig(C) 即广义本征值
+        L = jnp.linalg.cholesky(S)
+        C = jnp.linalg.solve(L, M)
+        C = jnp.linalg.solve(L, jnp.conj(C.T))
+        C = jnp.conj(C.T)
+        return jnp.linalg.eigvalsh(0.5 * (C + jnp.conj(C.T)))
+
     @jax.jit
     def grad_fn(p, sigma_flat, c, c2, f, g):
         x = sigma_flat.reshape(-1, K, n_spin)
-        log_psi, E_L, valid = jax.vmap(lambda xw: _one_full(p, xw, c, c2, f, g))(x)
+        # A、Z 一次算好并复用：E_L/logψ 用于梯度与 Loss，A/Z 同时供 Gram 监控
+        A, Z = jax.vmap(lambda xw: _one_az(p, xw, c, c2, f, g))(x)
+        E_L = jnp.linalg.solve(A, Z)
+        sign, logabs = jnp.linalg.slogdet(A)
+        log_psi = logabs + 1j * jnp.angle(sign)
+        valid = (jnp.all(jnp.isfinite(A), axis=(-2, -1))
+                 & jnp.all(jnp.isfinite(Z), axis=(-2, -1))
+                 & jnp.all(jnp.isfinite(E_L), axis=(-2, -1))
+                 & jnp.isfinite(logabs) & jnp.isfinite(jnp.real(log_psi)))
 
         loss = jnp.real(jnp.trace(E_L, axis1=-2, axis2=-1))
         valid = valid & jnp.isfinite(loss) & jnp.isfinite(jnp.real(log_psi))
@@ -180,6 +218,8 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         valid_ratio = jnp.sum(valid_f) / x.shape[0]
 
         wv = jax.lax.stop_gradient(importance_weights_from_logpsi(log_psi, valid))
+        # 每步能量谱：Gram 广义本征（不是 eig⟨E_L⟩，后者迹对谱错）
+        lam_gram = _gram_eig(A, Z, wv, valid)
 
         E_L_safe = jnp.where(jnp.isfinite(E_L), E_L, 0.0)
         E_L_mean = jnp.sum(E_L_safe * wv.reshape((-1, 1, 1)), axis=0)
@@ -206,6 +246,7 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
             "ess": ess,
             "grad_finite": jnp.all(jnp.isfinite(grad_flat)),
             "loss_finite": jnp.isfinite(loss_mean),
+            "lam_gram": lam_gram,          # (K,) 升序；正确监控量（Gram 广义本征）
             "should_skip": ~(
                 jnp.all(jnp.isfinite(grad_flat))
                 & jnp.isfinite(loss_mean)

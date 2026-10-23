@@ -1,0 +1,86 @@
+\begin{thebibliography}{11}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Knowles and Handy(1984)]{knowles1984}
+Peter~J. Knowles and Nicholas~C. Handy.
+\newblock A new determinant-based full configuration interaction method.
+\newblock \emph{Chemical Physics Letters}, 111\penalty0 (4--5):\penalty0
+  315--321, 1984.
+\newblock \doi{10.1016/0009-2614(84)85513-X}.
+
+\bibitem[Foulkes et~al.(2001)Foulkes, Mitas, Needs, and Rajagopal]{foulkes2001}
+W.~M.~C. Foulkes, L.~Mitas, R.~J. Needs, and G.~Rajagopal.
+\newblock Quantum monte carlo simulations of solids.
+\newblock \emph{Reviews of Modern Physics}, 73\penalty0 (1):\penalty0 33--83,
+  2001.
+\newblock \doi{10.1103/RevModPhys.73.33}.
+
+\bibitem[Becca and Sorella(2017)]{becca2017}
+Federico Becca and Sandro Sorella.
+\newblock \emph{Quantum Monte Carlo Approaches for Correlated Systems}.
+\newblock Cambridge University Press, Cambridge, 2017.
+
+\bibitem[Carleo and Troyer(2017)]{carleo2017}
+Giuseppe Carleo and Matthias Troyer.
+\newblock Solving the quantum many-body problem with artificial neural
+  networks.
+\newblock \emph{Science}, 355\penalty0 (6325):\penalty0 602--606, 2017.
+\newblock \doi{10.1126/science.aag2302}.
+
+\bibitem[Vicentini et~al.(2022)Vicentini, Hofmann, Sz{\'a}bo, Wu, Roth,
+  Giuliani, Nys, Lacroix, Aitchison, Iannazzi, et~al.]{vicentini2022}
+Filippo Vicentini, Damian Hofmann, Attila Sz{\'a}bo, Dian Wu, Christopher Roth,
+  Giacomo Giuliani, Jannes Nys, Victor Lacroix, Matthew Aitchison, Simone
+  Iannazzi, et~al.
+\newblock Netket 3: Machine learning toolbox for many-body quantum systems.
+\newblock \emph{SciPost Physics Codebases}, 7:\penalty0 001, 2022.
+\newblock \doi{10.21468/SciPostPhysCodeb.7}.
+
+\bibitem[Zhao and Neuscamman(2020)]{zhao2020}
+Luning Zhao and Eric Neuscamman.
+\newblock Excited-state variational monte carlo with a spin-adapted penalty
+  method.
+\newblock \emph{Journal of Chemical Theory and Computation}, 16\penalty0
+  (8):\penalty0 4689--4702, 2020.
+
+\bibitem[Choo et~al.(2018)Choo, Carleo, Regnault, and Neupert]{choo2018}
+Kenny Choo, Giuseppe Carleo, Nicolas Regnault, and Titus Neupert.
+\newblock Symmetries and many-body excitations with neural-network quantum
+  states.
+\newblock \emph{Physical Review Letters}, 121\penalty0 (16):\penalty0 167204,
+  2018.
+\newblock \doi{10.1103/PhysRevLett.121.167204}.
+
+\bibitem[Entwistle et~al.(2023)Entwistle, Sch{\"a}tzle, Erdman, Hermann, and
+  No{\'e}]{entwistle2023}
+Michael~T. Entwistle, Zeno Sch{\"a}tzle, Paul~A. Erdman, Jan Hermann, and Frank
+  No{\'e}.
+\newblock Electronic excited states in deep variational monte carlo.
+\newblock \emph{Nature Communications}, 14:\penalty0 274, 2023.
+
+\bibitem[Pfau et~al.(2024)Pfau, Axelrod, Sutterud, von Glehn, and
+  Spencer]{pfau2024}
+David Pfau, Simon Axelrod, Halvard Sutterud, Ingrid von Glehn, and James~S.
+  Spencer.
+\newblock Accurate computation of quantum excited states with neural networks.
+\newblock \emph{Science}, 385:\penalty0 eadn0137, 2024.
+\newblock \doi{10.1126/science.adn0137}.
+
+\bibitem[Saad(2011)]{saad2011}
+Yousef Saad.
+\newblock \emph{Numerical Methods for Large Eigenvalue Problems}.
+\newblock SIAM, Philadelphia, 2nd edition, 2011.
+
+\bibitem[Wang and Zunger(1994)]{wang1994}
+Lin-Wang Wang and Alex Zunger.
+\newblock Solving schr{\"o}dinger's equation around a desired energy:
+  Application to silicon quantum dots.
+\newblock \emph{Journal of Chemical Physics}, 100\penalty0 (3):\penalty0
+  2394--2397, 1994.
+\newblock \doi{10.1063/1.466486}.
+
+\end{thebibliography}
