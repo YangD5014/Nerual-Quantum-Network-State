@@ -20,9 +20,13 @@ find_expr=(. -type f -size -20M
            -not -path "./.git/*"
            -not -path "*/__pycache__/*"
            -not -name ".DS_Store")
-for p in "${sub_paths[@]}"; do
-    find_expr+=(-not -path "${p}/*")
-done
+# 注意：macOS 自带 bash 3.2 在 set -u 下展开空数组会报 unbound variable，
+# 故先用长度判断再展开
+if [ ${#sub_paths[@]} -gt 0 ]; then
+    for p in "${sub_paths[@]}"; do
+        find_expr+=(-not -path "${p}/*")
+    done
+fi
 
 # 4. 逐个文件 add：用 -print0/-0 处理含空格、中文的文件名；单个失败不影响其它文件
 added=0
