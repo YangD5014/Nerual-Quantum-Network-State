@@ -9,11 +9,16 @@ timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 # 1. 先清空暂存区，防止之前残留
 git reset -q
 
-# 2. 收集子模块路径：git 不允许把子模块内部的文件当普通路径 add
+# 2. 收集子模块（gitlink）路径：git 不允许把子模块内部的文件当普通路径 add。
+#    不能只读 .gitmodules —— 本仓库有未登记 .gitmodules 的 gitlink（如 不常用/激发态能量），
+#    直接用索引中 mode=160000 的条目识别才可靠。
 sub_paths=()
-while read -r _key sub_path; do
-    [ -n "$sub_path" ] && sub_paths+=("./$sub_path")
-done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null)
+while IFS= read -r -d '' entry; do
+    mode=${entry%% *}
+    if [ "$mode" = "160000" ]; then
+        sub_paths+=("./${entry#*$'\t'}")
+    fi
+done < <(git ls-files -s -z)
 
 # 3. 构造 find 条件：<20MB、排除 .git、__pycache__、.DS_Store、子模块目录
 find_expr=(. -type f -size -20M
