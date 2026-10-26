@@ -12,8 +12,11 @@
   ⑤ 每步全空间监控（c_err/λ_sub/冻结剩余/max|A|）与收尾 extract_physical_states
 
 删除后本脚本**不接触任何 2^N 维数组**：前向、梯度、QGT、采样、提取全部逐点。
-监控改为 matrix-free 量：Loss=Re tr⟨E_L⟩、λ̂=eig(sym(⟨E_L⟩))（方法报告 §2.1，
-2×2 小矩阵）、valid/ESS、aux 权重健康、尺度 f/g、梯度范数。
+监控改为 matrix-free 量：Loss=Re tr⟨E_L⟩、λ̂ = 单副本均匀测度 Ritz 值 M v = λ S v
+（参考密度 q=Σ|Φ̃|²+εΣ|Ψ̃|² 上采样、w=1/(M·q)，广义本征用**截断伪逆**：
+S=U s U† 只保留 s > NES_PINV_RCOND·s_max 的方向，丢弃方向填 NaN）、
+valid/ESS、aux 权重健康、尺度 f/g、梯度范数。
+旧监控量 eig(sym⟨E_L⟩) 已弃用并删除（A⁻¹ 单样本逆致谱扩散，会给出假能级）。
 
 物理态提取（matrix-free）：训练结束后在最终尺度下采一批 aux 样本，用同一 q 的
 重要性权重构造 ⟨χ|χ⟩、⟨χ|H|χ⟩ 的 MC Gram（Z 在广义本征中严格抵消），解 2×2
@@ -23,7 +26,7 @@
 运行：
     python H2_631G_8Qbit_K2_frozen4_deflation_MatrixFree_Pure.py                 # 1500 步
     NES_N_ITER=5 python H2_631G_8Qbit_K2_frozen4_deflation_MatrixFree_Pure.py    # smoke
-环境变量：NES_N_ITER / NES_AUX_M(默认1024) / NES_SCALE_BETA(默认0.9) / NES_INIT_SEED
+环境变量：NES_N_ITER / NES_AUX_M(默认1024) / NES_SCALE_BETA(默认0.9) / NES_INIT_SEED / NES_PINV_RCOND
 """
 import logging
 import os
@@ -152,6 +155,8 @@ AUX_SWEEP = 20                        # 辅助采样每步扫描数
 SCALE_BETA = float(os.environ.get("NES_SCALE_BETA", 0.9))  # β：尺度 f/g 的 EMA 平滑系数（首步取 1=fresh）
 EPS_MIX = 0.25                        # ε：参考密度 q=Σ|φ̃|²+ε·Σ|ψ̃|² 中 active 项混合系数
                                       #（保证 q 覆盖 active 列支撑，防稀有组态梯度信号丢失）
+# 监控量伪逆截断阈值：S=U s U†，只保留 s > PINV_RCOND·s_max 的方向（丢弃方向填 NaN）
+PINV_RCOND = float(os.environ.get("NES_PINV_RCOND", 1e-8))
 
 # 冻结源：npz 只取 v_rot（4×4 列约定，非全空间对象）；pkl 取旧网络参数
 NPZ_PATH = os.path.join(this_file_dir, "冻结K4", "近似本征态_K4_26-10-07-19-57.npz")
@@ -205,7 +210,7 @@ logger.info(f"active 列 fresh 初始化 seed={seed}（参照运行同 seed，co
 # bundle：方案 A' 全部计算对象的字典（aux_logq/estimate_grams/machine_single/
 #   machine_batch/forward/grad_fn/qgt_fn/cols），内部只按 walker 逐点求值
 bundle = make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
-                        n_spin=SINGLE_SIZE, eps=EPS_MIX)
+                        n_spin=SINGLE_SIZE, eps=EPS_MIX, pinv_rcond=PINV_RCOND)
 
 # f：冻结列公共实尺度（φ̃=φ·e^{−f}）；g：active 列逐列实尺度（ψ̃_m=ψ_m·e^{−g_m}）
 # 初值 0 ⇒ 训练第一步的 aux 批先做 fresh 归一（β=1）
@@ -293,7 +298,8 @@ for step in range(N_ITER):
         lam_history.append(np.array([np.nan, np.nan]))
         steps_history.append(step)
         diag_history.append({"valid_ratio": np.nan, "ess": np.nan, "grad_norm_raw": np.nan,
-                             "grad_norm_natural": np.nan, "w_ess": np.nan, "max_w_ratio": np.nan})
+                             "grad_norm_natural": np.nan, "w_ess": np.nan, "max_w_ratio": np.nan,
+                             "pinv_n_keep": np.nan, "pinv_cond": np.nan})
         continue
 
     # --- 2. EMA 尺度更新 + c/c2 同步变换（χ̃ 方向不变） ---
@@ -371,17 +377,28 @@ for step in range(N_ITER):
         updates, opt_state = optimizer.update(grad_raw, opt_state, total_params)
         total_params = optax.apply_updates(total_params, updates)
 
-    # --- 5. matrix-free 监控：λ̂ = eig(sym(⟨E_L⟩))（方法报告 §2.1，2×2 小矩阵） ---
-    # E_h：E_L_mean 的 Hermitian 对称化（采样噪声使 ⟨E_L⟩ 非严格 Herm，对称化后取实本征值）
-    # λ̂ 是 active block 能量的实时估计（有采样噪声；精确值看收尾广义本征）
-    E_h = 0.5 * (E_L_mean + jnp.conj(E_L_mean.T))
-    lam_hat = np.sort(np.linalg.eigvalsh(np.asarray(E_h)).real)
+    # --- 5. 监控：单副本均匀测度 Ritz 值 M v = λ S v（截断伪逆，唯一监控量） ---
+    # 由本步 aux 批在同一参考密度 q 下用 1/(M·q) 权重组装（estimate_grams 内完成）：
+    #   S_ij=Σ_σ χ_i* χ_j，M_ij=Σ_σ χ_i* (Hχ_j)，χ=Ψ̃−Φ̃c、Hχ=HΨ̃−HΦ̃c
+    # 广义本征用截断伪逆：S=U s U†，只保留 s > PINV_RCOND·s_max 的方向，
+    # 被截断方向填 NaN（S 近奇异时不会出现 ~1e10 的假能级）。
+    # 旧监控量 eig(sym⟨E_L⟩) 已弃用并删除（A⁻¹ 单样本逆致谱扩散，会给出假能级）。
+    lam_hat = np.sort(np.asarray(aux_g["lam_uniform"]).real)
+    pinv_n_keep = int(aux_g["pinv_n_keep"])
+    pinv_cond = float(aux_g["pinv_cond"])
+    if pinv_n_keep < K:
+        logger.warning(
+            f"【Step {step}】S 有效秩 {pinv_n_keep}/{K} < K，监控量整步屏蔽；"
+            f"截断前伪逆值={np.round(lam_hat, 8)}（NaN=已丢弃方向）"
+        )
+        lam_hat = np.full(K, np.nan)
 
     accept = getattr(sampler_state, "average_acceptance", None)   # 主采样平均接受率（健康 ~0.1–0.5）
     logger.info(
         f"[Step {step:3d}] Loss={float(jnp.real(loss_mean)):.8f} | "
-        f"λ̂0={lam_hat[0]:.8f} λ̂1={lam_hat[1]:.8f} | f={float(f):.3f} g={np.round(np.asarray(g),3)}"
+        f"λ̂={np.round(lam_hat, 8)} | f={float(f):.3f} g={np.round(np.asarray(g),3)}"
     )
+    logger.info(f"          λ̂(pinv keep={pinv_n_keep}/{K}, cond(S)={pinv_cond:.2e})")
     logger.info(
         f"诊断 | valid={float(aux['valid_ratio']):.3f} | ESS={float(aux['ess']):.0f}/{sigma_flat.shape[0]} | "
         f"aux_ess={float(aux_g['w_ess']):.0f}/{AUX_M} | aux_maxw={float(aux_g['max_w_ratio']):.2f} | "
@@ -400,6 +417,8 @@ for step in range(N_ITER):
         "grad_norm_natural": grad_norm_natural,     # SR 方向范数（收敛指标）
         "w_ess": float(aux_g["w_ess"]),             # aux 批 1/q 权重有效样本数（Gram 噪声水平）
         "max_w_ratio": float(aux_g["max_w_ratio"]), # aux 权重峰值/均值（重尾预警）
+        "pinv_n_keep": float(pinv_n_keep),          # 伪逆保留方向数（<K 说明 S 被截断）
+        "pinv_cond": float(pinv_cond),              # S 保留子空间条件数（病态预警）
     })
 
     # 周期性落盘（smoke 的 N_ITER≤5 不存，防覆盖正式产物）；params 只留均匀采样的最近 15 份

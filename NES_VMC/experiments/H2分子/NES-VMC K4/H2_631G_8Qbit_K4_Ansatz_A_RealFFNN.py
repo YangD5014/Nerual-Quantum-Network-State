@@ -28,9 +28,8 @@ from NES_VMC_tool import (
     _masked_mean_batch,
     make_gauge_fn,
     make_MS_estimator_fn,
-    make_MS_unbiased_estimator_fn,
-    compute_lam_v_from_samples_unbiased,
-    compute_lam_v_from_samples
+    make_uniform_level_estimator_fn,
+    compute_lam_v_from_samples_uniform,
 )
 from H2_6_31G_8Qbit import H2_6_31G_8Qbit,SINGLE_SIZE, ha,hi, E_fcis, Hatree_Fock
 
@@ -334,10 +333,47 @@ lr = 0.1
 qgt_diag_shift = 0.1
 RESET_PERIOD = 10
 SAVE_INTERVAL = 20
+# 能级监控：单副本均匀测度采样（与训练采样解耦，样本估计，不枚举全空间）
+MONITOR_CHAINS = 32
+MONITOR_SAMPLES_PER_CHAIN = 64
+MONITOR_SWEEP_SIZE = 10
 DATA_DIR = os.path.join(this_file_dir, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 HISTORY_FILE = f"{DATA_DIR}/{time_str}_history_natural_gradient_H2_molecule_K{K}__realFFNN.pkl"
+PARAMS_NPZ = f"{DATA_DIR}/{time_str}_params_H2_molecule_K{K}__realFFNN.npz"
 os.makedirs(DATA_DIR, exist_ok=True)
+
+
+# ====================== nnx.split 参数的 npz 存取 ======================
+# nnx.split 得到的 params 是 flax.nnx.State（pytree，叶子是 jax 数组），可以直接存 npz。
+# 需额外保存两项元信息才能无损还原：
+#   __order__  ：每个叶子的可读路径（如 ['single_ansatz_list'][0]['backbone1']['kernel'].value），
+#                同时固定展平顺序（npz 按键名排序，不保存顺序会错位）；
+#   __treedef__：pickle 后的 PyTreeDef，tree_unflatten 用它重建同一结构。
+# 用法：
+#   save_params_npz(total_params, path)
+#   params = load_params_npz(path)          # 取回 State
+#   model  = nnx.merge(graphdef, params)    # 需要时再合并成 nnx.Module
+# 注意：读回前务必先 jax.config.update("jax_enable_x64", True)。JAX 在 x64 关闭时会
+#       把 float64 静默降为 float32（包括反序列化 pickle 中的 jax 数组），会看到 ~1e-8 的“假差异”。
+def save_params_npz(params, npz_path):
+    """把 nnx.split 的参数树（State）逐叶子存进 npz，返回叶子数。"""
+    leaves_with_path, treedef = jax.tree_util.tree_flatten_with_path(params)
+    arrays = {f"p{i:04d}": np.asarray(leaf) for i, (_, leaf) in enumerate(leaves_with_path)}
+    arrays["__order__"] = np.array(
+        [jax.tree_util.keystr(p) for p, _ in leaves_with_path], dtype=str
+    )
+    arrays["__treedef__"] = np.frombuffer(pickle.dumps(treedef), dtype=np.uint8)
+    np.savez(npz_path, **arrays)
+    return len(leaves_with_path)
+
+
+def load_params_npz(npz_path):
+    """与 save_params_npz 配对：读回参数树（State），结构与 dtype/shape 完全一致。"""
+    z = np.load(npz_path, allow_pickle=False)
+    treedef = pickle.loads(z["__treedef__"].tobytes())
+    leaves = [z[f"p{i:04d}"] for i in range(len(z["__order__"]))]
+    return jax.tree_util.tree_unflatten(treedef, leaves)
 
 # ====================== 模型与采样器 ======================
 total_ansatz = NESTotalAnsatz_stable(
@@ -406,7 +442,34 @@ def sample_machine(params, sigma):
 
 sampler_state = nes_sampler.init_state(sample_machine, total_params, sampler_rng)
 
-estimator = make_MS_unbiased_estimator_fn(ha=ha,single_machine_list=single_machine_list)
+# ====================== 能级监控：单副本均匀测度 ======================
+# 物理能级是单副本希尔伯特空间计数测度下的 Ritz 值(⟨ψ_i|ψ_j⟩、⟨ψ_i|H|ψ_j⟩ 对全部基态求和)。
+# 训练用的扩展空间 |Ψ|² 测度不等于这个内积：直接在其样本上做 K×K Gram 会把迹保持不变
+# 而把单个 λ 重新分配（实测 K6 的 E1/E4 各偏 ∓3.8 mHa，恰好抵消），因此不能当能级读数。
+# 这里用单副本参考分布 q(σ)∝Σ_j|ψ_j(σ)|² 采样 + 1/q 自归一化重要性加权还原均匀测度，
+# 全程 K×K、逐样本计算，不枚举全空间，可推广到更大体系。
+monitor_estimator, monitor_log_q = make_uniform_level_estimator_fn(
+    ha=ha,
+    single_machine_list=single_machine_list,
+    total_graphdef=total_graphdef,
+)
+
+
+def monitor_machine(params, sigma):
+    """machine_pow=1 时，采样分布 ∝ exp(log q) = q(σ) = Σ_j|ψ_j(σ)|²。"""
+    return monitor_log_q(params, sigma)
+
+
+monitor_sampler = nk.sampler.MetropolisSampler(
+    hilbert=hi,
+    rule=molecule.single_rule,
+    n_chains=MONITOR_CHAINS,
+    sweep_size=MONITOR_SWEEP_SIZE,
+    machine_pow=1,
+)
+monitor_sampler_state = monitor_sampler.init_state(
+    monitor_machine, total_params, jax.random.PRNGKey(31)
+)
 # ====================== 训练循环 ======================
 logger.info("\n" + "=" * 60)
 logger.info("开始多链 NES-VMC 训练 | 实参数 FFNN | 双侧一致列规范 + 周期性 gauge reset")
@@ -415,6 +478,7 @@ N_CHAINS ={N_CHAINS}\n\
 N_SAMPLES_PER_CHAIN ={N_SAMPLES_PER_CHAIN}\n\
 SWEEP_SIZE = {SWEEP_SIZE}\n\
 machine_pow = 1 (|Ψ| 采样 + 重要性加权 w∝|Ψ|)\n\
+MONITOR_CHAINS = {MONITOR_CHAINS} | MONITOR_SAMPLES_PER_CHAIN = {MONITOR_SAMPLES_PER_CHAIN} (单副本均匀测度能级监控)\n\
 N_ITER = {N_ITER}\n\
 Natural_Grad = {Natural_Grad}\n\
 clip_norm = {clip_norm}\n\
@@ -533,23 +597,24 @@ for step in range(N_ITER):
 
 
 
-    # 5. 能量监控：正确的 Gram 广义本征值  M v = λ S v
-    #    Ŝ = Σ_n w_n P_n†P_n / Σw ，M̂ = Σ_n w_n P_n†(HP)_n / Σw ，w ∝ |Ψ|（恢复 |Ψ|² 测度）
-    #    P[n,α,β]=ψ_β(x_{nα})、(HP)[n,α,β]=(Hψ_β)(x_{nα})，全程 K×K，逐点、无全空间数组。
-    #    **不再使用 eig(⟨E_L⟩)=eig(⟨A⁻¹Z⟩)**：E_L 是逐样本矩阵逆的比值估计，
-    #    迹等于 Loss（正确）但本征谱严重扩散（K=4 冻结扩展曾偏 ±137 mHa）。
-    valid = aux["valid"]
-    w_batch = _importance_weights(total_machine, total_params, x_batch, g_current, valid)
-    lam_real, v, n_valid, Mhat, Shat = compute_lam_v_from_samples_unbiased(
-        ha=ha,
-        single_machine_list=single_machine_list,
+    # 5. 能量监控：单副本均匀测度下的 Ritz 广义本征值  M v = λ S v
+    #    与训练解耦：用 q(σ)∝Σ_j|ψ_j(σ)|² 单独采一批单副本样本，再以 1/q 加权还原
+    #    均匀(计数)测度。这样得到的 λ 才是真正的能级读数；不要在扩展空间 |Ψ|² 样本上
+    #    直接做 Gram（那个度量不等于单副本内积，会保迹地重排 λ）。
+    monitor_samples_raw, monitor_sampler_state = monitor_sampler.sample(
+        machine=monitor_machine,
+        parameters=total_params,
+        state=monitor_sampler_state,
+        chain_length=MONITOR_SAMPLES_PER_CHAIN,
+    )
+    monitor_samples = monitor_samples_raw.reshape(-1, SINGLE_SIZE)
+    lam_real, v, n_valid, Mhat, Shat = compute_lam_v_from_samples_uniform(
+        estimator=monitor_estimator,
         total_params=total_params,
-        x_batch=x_batch,
-        w_batch=w_batch,
-        estimator=estimator,
+        x_batch=monitor_samples,
         return_MS=True,
     )
-    eig_vals = lam_real          # 监控量统一用 Gram 广义本征（能量升序）
+    eig_vals = lam_real          # 监控量：均匀测度 Ritz 值（能量升序）
 
     M_matrix_history.append(Mhat)
     S_matrix_history.append(Shat)
@@ -564,19 +629,21 @@ for step in range(N_ITER):
     x_single = x_batch[0:1, ...]
     psi_mat = total_matrix_machine(total_params, x_single, g_current)[0]
     psi_cond = jnp.linalg.cond(psi_mat)
+    s_cond = float(jnp.linalg.cond(Shat))
 
     gauge_now = float(jnp.real(gauge_fn(total_params, x_batch)))
     g_abs = float(jnp.linalg.norm(g_current))
+    n_valid_train = int(jnp.sum(aux["valid"]))
 
     # 7. 日志
     logger.info(f"[Step {step:3d}] logΨ: mean={log_Psi_batch.mean():.3f} | min={log_Psi_batch.min():.3f} | max={log_Psi_batch.max():.3f}")
     logger.info(f"梯度监控 | raw={grad_norm_raw:.4f} | per_param={grad_norm_per_param:.4f} |  natural={grad_norm_natural:.4f} | clipped={grad_norm_clipped:.4f}(上限{clip_norm})")
     logger.info(f"原始规范坐标 G(Re Σrow_mean) = {gauge_now:+.4f} | 累计|g| = {g_abs:.4f}")
-    logger.info(f"Ψ矩阵条件数 cond(Ψ) = {psi_cond:.2e}")
+    logger.info(f"Ψ矩阵条件数 cond(Ψ) = {psi_cond:.2e} | 监控S条件数 cond(S) = {s_cond:.2e}")
     logger.info(
-        f"Loss={loss_mean:.6f} | Gram 广义本征 λ(升序): "
+        f"Loss={loss_mean:.6f} | 均匀测度 Ritz λ(升序): "
         + " | ".join(f"λ{i}={lam_real[i]:.8f}" for i in range(K))
-        + f" | n_valid={n_valid}"
+        + f" | n_valid_monitor={n_valid} | n_valid_train={n_valid_train}"
     )
     logger.info("#-----------------------------------------#")
 
@@ -642,6 +709,9 @@ logger.info("\n" + "=" * 60)
 logger.info("训练完成!")
 logger.info("=" * 60)
 
+# 训练结束后记录「最后一次优化更新之后」的参数，保证 history["params"][-1] 与末尾另存的 npz 同一份
+params_history[:] = [total_params]
+
 # 训练结束后最后一次写入，确保数据完整
 history = {
     "steps": [int(s) for s in steps_history],
@@ -668,9 +738,14 @@ with open(HISTORY_FILE, "wb") as f:
     pickle.dump(history, f)
 logger.info(f"[保存] 训练结束，pickle 最终写入 {len(steps_history)} 条记录 → {HISTORY_FILE}")
 
+# 最后一个轮次的参数另存一份 npz（nnx.State 逐叶子存储 + 结构元信息）
+n_leaf = save_params_npz(total_params, PARAMS_NPZ)
+logger.info(f"[保存] 最终轮次 params 另存 npz（{n_leaf} 个叶子）→ {PARAMS_NPZ}")
+
 logger.info(f'绘制图片...')
 
-# 监控量 = Gram 广义本征值 λ（M v = λ S v），已存于 history["Energy_levels"] / ["lam_real"]
+# 监控量 = 单副本均匀测度下的 Ritz 广义本征值 λ（M v = λ S v），
+# 已存于 history["Energy_levels"] / ["lam_real"]
 levels = np.asarray(history["Energy_levels"], dtype=float)
 fci_k = np.asarray(E_fcis[:K], dtype=float)
 energy_level_error = np.abs(levels - fci_k)          # (N_step, K) 与 FCI 的偏差
@@ -678,15 +753,15 @@ colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"][:K]
 
 fig, axs = plt.subplots(5, 1, figsize=(10, 25))
 
-# 子图 0：每步 λ（= Gram 广义本征值）+ FCI 基准虚线（同能级同色）
+# 子图 0：每步 λ（= 单副本均匀测度 Ritz 值）+ FCI 基准虚线（同能级同色）
 for k in range(K):
     axs[0].plot(history["steps"], levels[:, k], lw=1.2, color=colors[k],
                 label=f"NES-VMC level {k}")
     axs[0].axhline(fci_k[k], lw=1.0, ls=":", color=colors[k],
                    label=f"EFCI level {k}")
-axs[0].set_ylabel("Gram eigenvalue λ (Ha)")
+axs[0].set_ylabel("Ritz λ (uniform measure, Ha)")
 axs[0].set_xlabel("step")
-axs[0].set_title(f"NES-VMC H2 (real-parameter FFNN) K={K}, monitoring = Gram generalized eigenvalues")
+axs[0].set_title(f"NES-VMC H2 (real-parameter FFNN) K={K}, monitoring = uniform-measure Ritz values")
 axs[0].legend(fontsize=8)
 
 # 子图 1：Loss（= Re tr⟨E_L⟩，迹估计无偏；收敛后与 Σλ 一致）

@@ -43,7 +43,8 @@ from NES_VMC_deflation_real import importance_weights_from_logpsi
 
 
 def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
-                   n_spin=8, eps=0.25, gram_ridge=1e-12, min_valid_ratio=0.25):
+                   n_spin=8, eps=0.25, gram_ridge=1e-12, min_valid_ratio=0.25,
+                   pinv_rcond=1e-8):
     """构造 A' matrix-free deflation bundle。
 
     Parameters
@@ -55,11 +56,14 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
     sms          : list[K] gauge-fixed active 单列 machine（可训练）
     eps          : q 中 active 混合项系数（P1 参考分布）
     gram_ridge   : Ĝ 对角正则
+    pinv_rcond   : 监控量广义本征的伪逆截断阈值（丢弃 s < pinv_rcond·s_max 的方向）
 
     Returns
     -------
     dict: aux_logq / estimate_grams / machine_single / machine_batch /
           forward / grad_fn / qgt_fn / cols
+          （estimate_grams 的 aux 里含唯一监控量 "lam_uniform"：单副本均匀测度
+            Ritz 值，用截断伪逆求解；另有 "pinv_n_keep"/"pinv_cond" 供健康诊断）
     """
     r = len(frozen_sms)
     K = len(sms)
@@ -141,6 +145,48 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         c = jnp.linalg.solve(Gm, Mm)
         c2 = jnp.linalg.solve(Gm, M2 - HG @ c)
 
+        # ---- 单副本均匀测度 Ritz 值（唯一监控量；截断伪逆解广义本征）----
+        # 物理能级 = 单副本希尔伯特空间计数测度下的 Ritz 值：
+        #   S_ij = Σ_σ χ_i(σ)* χ_j(σ)，M_ij = Σ_σ χ_i(σ)* (Hχ_j)(σ)
+        # 这里 q 上采样 + 1/(M·q) 自归一化权重 w 恰好还原该均匀测度；χ=Ψ̃−Φ̃c，
+        # Hχ=HΨ̃−HΦ̃c（与收尾提取完全同构）。1/(qM) 与 1/q 只差公共常数，广义本征不变。
+        #
+        # 求解方式：S = U diag(s) U†，只保留 s > pinv_rcond·s_max 的方向：
+        #   W = S⁺^{1/2} = U diag(1/√s_keep) U†，C = W M W，λ = eig(C)。
+        #   被截断方向在 W 的零空间，C 对其作用为 0 ⇒ 本征值恒为 0；
+        #   用与 S 尺度无关的判据识别：v 在“丢弃子空间”的投影占比
+        #     drop = ‖(I − P_keep)v‖²，P_keep = U diag(keep) U†
+        #   drop ≈ 1 ⇒ 该方向已被截断（填 NaN）；drop ≈ 0 ⇒ 可信（含真实的 λ=0）。
+        #   注意不能拿 ‖Wv‖² 判方向：它带 1/s 的尺度，会随 S 整体缩放漂移。
+        # 这样 S 近奇异（首步随机初始化列近共线）时不会把噪声方向放大成 ~1e10 的假能级。
+        chi = Psi - Phi @ c
+        hchi = Hpsi - Hphi @ c
+        S_u = jnp.einsum("n,ni,nj->ij", wi, jnp.conj(chi), chi)
+        M_u = jnp.einsum("n,ni,nj->ij", wi, jnp.conj(chi), hchi)
+        S_u = 0.5 * (S_u + jnp.conj(S_u.T))
+        M_u = 0.5 * (M_u + jnp.conj(M_u.T))
+        s_all, U_all = jnp.linalg.eigh(S_u)                 # s 升序（实）
+        s_max = jnp.maximum(s_all[-1], 1e-300)
+        keep = s_all > pinv_rcond * s_max
+        s_safe = jnp.where(keep, s_all, 1.0)
+        inv_sqrt = jnp.where(keep, 1.0 / jnp.sqrt(s_safe), 0.0)
+        Uc = jnp.conj(U_all.T)
+        W = (U_all * inv_sqrt[None, :]) @ Uc               # S⁺^{1/2}（Hermitian）
+        P_keep = (U_all * keep.astype(U_all.real.dtype)[None, :]) @ Uc
+        C_tmp = W @ M_u @ W
+        C_u = 0.5 * (C_tmp + jnp.conj(C_tmp.T))
+        lam_raw, vec_all = jnp.linalg.eigh(C_u)
+        resid = vec_all - P_keep @ vec_all                  # 丢弃子空间分量
+        drop_frac = jnp.sum(jnp.abs(resid) ** 2, axis=0)    # ‖v‖=1（eigh 输出正交）
+        lam_uniform = jnp.where(drop_frac < 0.5, lam_raw, jnp.nan)
+        n_keep = jnp.sum(keep.astype(jnp.int32))
+        s_min_keep = jnp.min(jnp.where(keep, s_all, jnp.inf))
+        cond_pinv = jnp.where(
+            n_keep > 0,
+            s_max / jnp.maximum(s_min_keep, 1e-300),
+            jnp.inf,
+        )
+
         u = 1.0 / q
         u = u / jnp.sum(u)
         aux = {
@@ -148,6 +194,9 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
             "max_w_ratio": jnp.max(u) * M,          # 权重峰值/均值（爆炸预警）
             "grams_finite": (jnp.all(jnp.isfinite(c)) & jnp.all(jnp.isfinite(c2))
                              & jnp.all(jnp.isfinite(q)) & jnp.all(q > 0.0)),
+            "lam_uniform": lam_uniform,             # (K,) 升序；NaN=被伪逆截断的方向
+            "pinv_n_keep": n_keep,                  # 保留方向数（<K 说明该步秩亏）
+            "pinv_cond": cond_pinv,                 # 保留子空间条件数（病态预警）
         }
         max_phi2 = jax.lax.stop_gradient(jnp.max(jnp.sum(jnp.abs(Phi) ** 2, axis=-1)))
         max_psi = jax.lax.stop_gradient(jnp.max(jnp.abs(Psi), axis=0))
@@ -173,35 +222,10 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         im_g = jax.grad(lambda q: jnp.imag(_one_log(q, xw, c, f, g)))(p)
         return jax.tree.map(lambda a, b: a + 1j * b, re_g, im_g)
 
-    def _gram_eig(A, Z, wv, valid):
-        """加权 Gram 广义本征（**正确的能量监控量**）：M v = λ S v。
-
-        S = Σ_n w_n A_n†A_n / Σw,  M = Σ_n w_n A_n†Z_n / Σw,  w ∝ |Ψ_F|。
-        A_n[i,j] = χ_j(x_i)（walker n 的第 i 个组态上第 j 列），故
-        S_{jj'} = Σ_n Σ_i w_n χ_j(x_i)* χ_{j'}(x_i) 即 ⟨χ_j|χ_{j'}⟩ 的 MC 估计。
-        与收尾提取同构、**不出现 A⁻¹** ⇒ 不会像 eig(sym⟨E_L⟩) 那样产生谱扩散偏差。
-        """
-        wsum = jnp.maximum(jnp.sum(wv), 1e-30)
-        mask = valid[:, None, None]
-        A_s = jnp.where(mask, A, 0.0)
-        Z_s = jnp.where(mask, Z, 0.0)
-        S = jnp.einsum("n,nmi,nmj->ij", wv, jnp.conj(A_s), A_s) / wsum
-        M = jnp.einsum("n,nmi,nmj->ij", wv, jnp.conj(A_s), Z_s) / wsum
-        S = 0.5 * (S + jnp.conj(S.T))
-        M = 0.5 * (M + jnp.conj(M.T))
-        jitter = 1e-12 * jnp.maximum(jnp.real(jnp.trace(S)), 1e-30) / K
-        S = S + jitter * jnp.eye(K, dtype=S.dtype)
-        # 广义本征白化：S = L L†，C = L⁻¹ M L⁻†（Hermitian），eig(C) 即广义本征值
-        L = jnp.linalg.cholesky(S)
-        C = jnp.linalg.solve(L, M)
-        C = jnp.linalg.solve(L, jnp.conj(C.T))
-        C = jnp.conj(C.T)
-        return jnp.linalg.eigvalsh(0.5 * (C + jnp.conj(C.T)))
-
     @jax.jit
     def grad_fn(p, sigma_flat, c, c2, f, g):
         x = sigma_flat.reshape(-1, K, n_spin)
-        # A、Z 一次算好并复用：E_L/logψ 用于梯度与 Loss，A/Z 同时供 Gram 监控
+        # A、Z 一次算好并复用：E_L/logψ 用于梯度、QGT 与 Loss
         A, Z = jax.vmap(lambda xw: _one_az(p, xw, c, c2, f, g))(x)
         E_L = jnp.linalg.solve(A, Z)
         sign, logabs = jnp.linalg.slogdet(A)
@@ -218,8 +242,6 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         valid_ratio = jnp.sum(valid_f) / x.shape[0]
 
         wv = jax.lax.stop_gradient(importance_weights_from_logpsi(log_psi, valid))
-        # 每步能量谱：Gram 广义本征（不是 eig⟨E_L⟩，后者迹对谱错）
-        lam_gram = _gram_eig(A, Z, wv, valid)
 
         E_L_safe = jnp.where(jnp.isfinite(E_L), E_L, 0.0)
         E_L_mean = jnp.sum(E_L_safe * wv.reshape((-1, 1, 1)), axis=0)
@@ -246,7 +268,6 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
             "ess": ess,
             "grad_finite": jnp.all(jnp.isfinite(grad_flat)),
             "loss_finite": jnp.isfinite(loss_mean),
-            "lam_gram": lam_gram,          # (K,) 升序；正确监控量（Gram 广义本征）
             "should_skip": ~(
                 jnp.all(jnp.isfinite(grad_flat))
                 & jnp.isfinite(loss_mean)

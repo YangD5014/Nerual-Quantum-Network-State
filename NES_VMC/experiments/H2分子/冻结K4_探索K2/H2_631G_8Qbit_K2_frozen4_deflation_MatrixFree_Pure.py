@@ -7,15 +7,20 @@
   ② 冻结源从上级目录读取，且**不再依赖 npz**：只需 K4 训练 pkl（params[-1]+samples），
      v_rot 由脚本内样本版 MV=SVA 现算（NES_VMC_tool.compute_lam_v_from_samples）；
   ③ 产物落本目录：npz→data/、曲线图→graph/；
-  ④ 监控量改为**正确的 Gram 广义本征值** M v = λ S v（S=Σw A†A, M=Σw A†Z，w∝|Ψ_F|），
-     不再用 eig(sym⟨E_L⟩)——后者因 A⁻¹ 的单样本逆使谱严重扩散（K=4 时可达 ±137 mHa）。
-不调用任何精确全空间对角化（FCI）：导入体系模块前设置 H2_COMPUTE_FCI=0，且脚本内
-不引用 E_fcis / fcivec；前向、梯度、QGT、采样、监控、提取全部逐点（matrix-free）。
+  ④ 监控量改为**单副本均匀测度下的 Ritz 值** M v = λ S v：在单组态参考密度
+     q=Σ|Φ̃|²+εΣ|Ψ̃|² 上采样，用 1/(M·q) 权重还原计数测度后组装 ⟨χ|χ⟩、⟨χ|H|χ⟩
+     （与收尾提取完全同构）。不再用 eig(sym⟨E_L⟩)（A⁻¹ 单样本逆致谱扩散 ±137 mHa），
+     也不用 |Ψ_F|² 加权的 Gram（度量不等于单副本内积，会保迹重排 λ 造成假偏差）。
+     广义本征用**截断伪逆**求解：S=U s U†，只保留 s > NES_PINV_RCOND·s_max 的方向
+     （丢弃方向填 NaN）。S 近奇异（首步随机初始化列近共线）时不会再把噪声放大成
+     ~1e10 的假能级；日志同时打印保留方向数与 cond(S)。
+算法（前向、梯度、QGT、采样、监控、提取）全程逐点、不做任何精确全空间对角化；
+E_fcis 只从体系模块读取、仅用作绘图中的参考真值与误差基准，不参与算法。
 
 运行：
     python H2_631G_8Qbit_K4_frozen4_deflation_MatrixFree_Pure.py                  # 500 步
     NES_N_ITER=5 python H2_631G_8Qbit_K4_frozen4_deflation_MatrixFree_Pure.py     # smoke
-环境变量：NES_N_ITER / NES_AUX_M(默认1024) / NES_SCALE_BETA(默认0.9) / NES_INIT_SEED
+环境变量：NES_N_ITER / NES_AUX_M(默认1024) / NES_SCALE_BETA(默认0.9) / NES_INIT_SEED / NES_PINV_RCOND
 """
 import logging
 import os
@@ -65,9 +70,10 @@ from NES_VMC_tool import make_MS_estimator_fn, compute_lam_v_from_samples
 #
 # 关键：必须在导入体系模块**之前**关闭 PySCF 的 FCI 全空间对角化。
 # 否则 import 时就会执行 cisolver.kernel()（模块级），实例化类还会再跑一次。
-# 本脚本只在 H2_6_31G_8Qbit 里取单组态空间/Hamiltonian/HF 锚点，绝不使用 E_fcis。
+# 本脚本只在 H2_6_31G_8Qbit 里取单组态空间/Hamiltonian/HF 锚点。
+# E_fcis（PySCF FCI 精确能级）**仅作为绘图参考值**，不进入前向/梯度/QGT/采样/监控/提取。
 os.environ.setdefault("H2_COMPUTE_FCI", "0")
-from H2_6_31G_8Qbit import SINGLE_SIZE, ha, hi, Hatree_Fock, single_edges
+from H2_6_31G_8Qbit import SINGLE_SIZE, ha, hi, Hatree_Fock, single_edges, E_fcis
 K = 2
 # 联合 walker 空间与 Hop 边：直接由单组态 hi / single_edges 构造，
 # **不实例化 H2_6_31G_8Qbit**（其构造函数同样会触发全空间 FCI）
@@ -163,12 +169,16 @@ AUX_SWEEP = 20                        # 辅助采样每步扫描数
 SCALE_BETA = float(os.environ.get("NES_SCALE_BETA", 0.9))  # β：尺度 f/g 的 EMA 平滑系数（首步取 1=fresh）
 EPS_MIX = 0.25                        # ε：参考密度 q=Σ|φ̃|²+ε·Σ|ψ̃|² 中 active 项混合系数
                                       #（保证 q 覆盖 active 列支撑，防稀有组态梯度信号丢失）
+# 监控量伪逆截断阈值：S=U s U†，只保留 s > PINV_RCOND·s_max 的方向。
+# 首步 active 列随机初始化、近共线时 S 近奇异，Cholesky+jitter(1e-12) 会把噪声方向
+# 放大成 1e10 量级的假 λ；截断后这些方向直接丢弃（填 NaN），不再污染能级读数。
+PINV_RCOND = float(os.environ.get("NES_PINV_RCOND", 1e-8))
 
 
 parent_dir = os.path.join(this_file_dir, '..')
 # 冻结源：只需 K=4 训练收敛的 pkl（params[-1] + samples）——v_rot 由本脚本内联
 # 样本版 MV=SVA 计算，**不再依赖外部 npz**。换冻结源只改这一行 PKL_PATH。
-PKL_PATH = os.path.join(parent_dir, "data", "26-10-22-01-58_history_natural_gradient_H2_molecule_K4__realFFNN.pkl")
+PKL_PATH = os.path.join(parent_dir, "NES-VMC K4/data", "26-10-25-02-46_history_natural_gradient_H2_molecule_K4__realFFNN.pkl")
 HISTORY_FILE = f"{data_dir}/{time_str}_history_K{K}_frozen4_deflation_MatrixFree_Pure.pkl"
 
 # ====================== 步骤 0：冻结列的逐点表示（无全空间运算、无 npz） ======================
@@ -192,7 +202,7 @@ frozen_sms = [create_single_machine_gauge_fixed(a, Hatree_Fock)[0]
               for a in old_ansatz.single_ansatz_list]
 frozen_params = [old_params["single_ansatz_list"][j] for j in range(OLD_K)]
 
-# v_rot：(4,4) 列旋转矩阵，脚本内计算（样本版 MV=SVA 广义本征）：
+# v_rot：(OLD_K,OLD_K) 列旋转矩阵，脚本内计算（样本版 MV=SVA 广义本征）：
 #   φ_k = Σ_j ψ_j^old · v_rot[j,k]，列=能级升序；与 npz 版 v_rot 同源同约定
 #   （见 冻结K4/测试各能级的近似本征态.py L124-134），只用 pkl 样本逐点估计，
 #   不接触任何 2^N 维数组。λ_k4 仅为样本版估计（供 v_rot 列排序），不参与训练监控。
@@ -230,7 +240,7 @@ logger.info(f"active 列 fresh 初始化 seed={seed}（参照运行同 seed，co
 # bundle：方案 A' 全部计算对象的字典（aux_logq/estimate_grams/machine_single/
 #   machine_batch/forward/grad_fn/qgt_fn/cols），内部只按 walker 逐点求值
 bundle = make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
-                        n_spin=SINGLE_SIZE, eps=EPS_MIX)
+                        n_spin=SINGLE_SIZE, eps=EPS_MIX, pinv_rcond=PINV_RCOND)
 
 # f：冻结列公共实尺度（φ̃=φ·e^{−f}）；g：active 列逐列实尺度（ψ̃_m=ψ_m·e^{−g_m}）
 # 初值 0 ⇒ 训练第一步的 aux 批先做 fresh 归一（β=1）
@@ -288,7 +298,7 @@ c2_cur = jnp.zeros((OLD_K, K), dtype=jnp.complex128)   # c2：二次投影系数
 
 # ====================== 历史容器 ======================
 loss_history, steps_history = [], []          # Loss=Re tr⟨E_L⟩；步号
-lam_history, params_history = [], []          # 每步 λ̂（K×K Gram 广义本征）；每步参数快照
+lam_history, params_history = [], []          # 每步 λ̂（单副本均匀测度 Ritz 值）；每步参数快照
 diag_history = []                              # 每步诊断字典（valid/ESS/梯度/aux 权重）
 n_skipped = 0                                  # 跳过更新计数（grams 非有限 / should_skip）
 n_grad_clip = 0                                # per-param 裁剪触发计数
@@ -320,7 +330,8 @@ for step in range(N_ITER):
         lam_history.append(np.full(K, np.nan))   # 长度必须=K，否则 lam_history 变 ragged、绘图崩
         steps_history.append(step)
         diag_history.append({"valid_ratio": np.nan, "ess": np.nan, "grad_norm_raw": np.nan,
-                             "grad_norm_natural": np.nan, "w_ess": np.nan, "max_w_ratio": np.nan})
+                             "grad_norm_natural": np.nan, "w_ess": np.nan, "max_w_ratio": np.nan,
+                             "pinv_n_keep": np.nan, "pinv_cond": np.nan})
         continue
 
     # --- 2. EMA 尺度更新 + c/c2 同步变换（χ̃ 方向不变） ---
@@ -356,7 +367,8 @@ for step in range(N_ITER):
     # grad_fn：实参数 Wirtinger 力梯度 ∇=∇Re+i∇Im，配 w∝|Ψ_F| 重要性加权
     #   grad_raw：力梯度 pytree；loss_mean：加权 Re tr⟨E_L⟩（优化目标）
     #   _E_L_mean：加权 K×K 局域能量矩阵 ⟨E_L⟩（仅诊断，不再用于监控谱）
-    #   aux：{valid_ratio, n_valid, ess, grad_finite, loss_finite, lam_gram, should_skip}
+    #   aux：{valid_ratio, n_valid, ess, grad_finite, loss_finite, should_skip}
+    #   aux_g：{w_ess, max_w_ratio, grams_finite, lam_uniform(唯一监控量), pinv_n_keep, pinv_cond}
     grad_raw, loss_mean, _E_L_mean, aux = bundle["grad_fn"](
         total_params, sigma_flat, c_cur, c2_cur, f, g
     )
@@ -398,17 +410,30 @@ for step in range(N_ITER):
         updates, opt_state = optimizer.update(grad_raw, opt_state, total_params)
         total_params = optax.apply_updates(total_params, updates)
 
-    # --- 5. 正确监控：Gram 广义本征 M v = λ S v（不出现 A⁻¹，无谱扩散偏差） ---
-    # S = Σ_n w_n A_n†A_n/Σw（⟨χ_i|χ_j⟩ 的 MC 估计）, M = Σ_n w_n A_n†Z_n/Σw（⟨χ_i|H|χ_j⟩）
-    # w ∝ |Ψ_F| 与梯度端同一重要性权重；λ 升序，与收尾提取（scipy_eigh(M_chi,S_chi)）同构。
-    # 注意：绝不能用 eig(sym⟨E_L⟩)——E_L=A⁻¹Z 是单样本矩阵逆的比值估计，迹对而谱错。
-    lam_hat = np.sort(np.asarray(aux["lam_gram"]).real)
+    # --- 5. 监控：单副本均匀测度 Ritz 值 M v = λ S v（截断伪逆，唯一监控量） ---
+    # 由本步 aux 批在同一参考密度 q 下用 1/(M·q) 权重组装（estimate_grams 内完成）：
+    #   S_ij=Σ_σ χ_i* χ_j，M_ij=Σ_σ χ_i* (Hχ_j)，χ=Ψ̃−Φ̃c、Hχ=HΨ̃−HΦ̃c
+    # 广义本征用截断伪逆：S=U s U†，只保留 s > PINV_RCOND·s_max 的方向，
+    # 被截断方向填 NaN（S 近奇异时不再出现 ~1e10 的假能级）。
+    # 旧监控量（eig(sym⟨E_L⟩) 与 |Ψ_F|² 加权 Gram）已弃用并删除：度量/逆不稳，会给出假能级。
+    lam_hat = np.sort(np.asarray(aux_g["lam_uniform"]).real)
+    pinv_n_keep = int(aux_g["pinv_n_keep"])
+    pinv_cond = float(aux_g["pinv_cond"])
+    if pinv_n_keep < K:
+        # S 有效秩不足 K（active 列近共线/被冻结空间覆盖）：χ 近似为 0，
+        # 其“大比值”只是秩亏子空间的噪声，无法给出 K 个可信 Ritz 值 ⇒ 整步屏蔽。
+        logger.warning(
+            f"【Step {step}】S 有效秩 {pinv_n_keep}/{K} < K，监控量整步屏蔽；"
+            f"截断前伪逆值={np.round(lam_hat, 8)}（NaN=已丢弃方向）"
+        )
+        lam_hat = np.full(K, np.nan)
 
     accept = getattr(sampler_state, "average_acceptance", None)   # 主采样平均接受率（健康 ~0.1–0.5）
     logger.info(
         f"[Step {step:3d}] Loss={float(jnp.real(loss_mean)):.8f} | "
         f"λ̂={np.round(lam_hat, 8)} | f={float(f):.3f} g={np.round(np.asarray(g),3)}"
     )
+    logger.info(f"          λ̂(pinv keep={pinv_n_keep}/{K}, cond(S)={pinv_cond:.2e})")
     logger.info(
         f"诊断 | valid={float(aux['valid_ratio']):.3f} | ESS={float(aux['ess']):.0f}/{sigma_flat.shape[0]} | "
         f"aux_ess={float(aux_g['w_ess']):.0f}/{AUX_M} | aux_maxw={float(aux_g['max_w_ratio']):.2f} | "
@@ -467,7 +492,7 @@ Hpsi = jnp.stack(
                     x=sigma_ext, shift=g[m]) for m in range(K)], axis=-1)
 Hphi = jnp.stack(
     [Ham_psi_scaled(ha=ha, single_machine=frozen_sms[j], params=frozen_params[j],
-                    x=sigma_ext, shift=f) for j in range(4)], axis=-1) @ V
+                    x=sigma_ext, shift=f) for j in range(OLD_K)], axis=-1) @ V
 Hchi = Hpsi - Hphi @ c_f                                # (M,K) Hχ̃（χ 已投影，Hχ 再减冻结成分）
 # q/wi：与训练同一参考密度、同一 1/q 重要性权重（Z 抵消的前提：所有 Gram 用同一 q）
 q = jnp.sum(jnp.abs(Phi) ** 2, axis=-1) + EPS_MIX * jnp.sum(jnp.abs(Psi) ** 2, axis=-1)
@@ -482,8 +507,8 @@ order = np.argsort(lam_mc.real)                          # 升序排列（φ̂�
 lam_mc, v_active = lam_mc[order].real, v_active[:, order]
 
 logger.info(f"\n================ 提取（matrix-free MC Gram） ================")
-logger.info(f"λ_extract（φ̂₄..φ̂₇，升序）= {np.round(lam_mc, 8)}")
-logger.info(f"Loss 末值 = {loss_history[-1]:.8f} | 监控量 = 每步 Gram 广义本征（M v = λ S v）")
+logger.info(f"λ_extract（φ̂{OLD_K}..φ̂{OLD_K + K - 1}，升序）= {np.round(lam_mc, 8)}")
+logger.info(f"Loss 末值 = {loss_history[-1]:.8f} | 监控量 = 每步单副本均匀测度 Ritz 值（M v = λ S v）")
 
 # ====================== 保存 ======================
 # 本副本产物落本目录：npz→data/、图→graph/
@@ -525,18 +550,19 @@ fig, axs = plt.subplots(5, 1, figsize=(10, 20))
 
 # 配色：K 个能级一一对应（同能级同色，能量子图与误差子图共用；对齐 制图.ipynb）
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"][:K]
-# 参照基准：收尾 matrix-free 提取的 λ_mc（第 OLD_K..OLD_K+K-1 能级）——
-# 全程逐点 MC Gram 广义本征，无 FCI / 无全空间对角化，也绝不用 E_fcis
-ref_targets = np.asarray(lam_mc[:K], dtype=float)
+# 参照基准：PySCF FCI 精确能级 E_fcis[OLD_K : OLD_K+K]（第 OLD_K..OLD_K+K-1 能级）
+# 注意：E_fcis **只用于绘图参考/误差基准**，不参与任何算法（前向、梯度、QGT、采样、监控、提取）
+ref_targets = np.asarray(E_fcis[OLD_K:OLD_K + K], dtype=float)
+lam_mc = np.asarray(lam_mc, dtype=float)   # 收尾提取值仍保留在 history/日志中，供交叉对照
 
-# 子图 1：每步 Gram 广义本征 λ̂ + 收尾提取基准虚线——应收敛到 ref_targets
+# 子图 1：每步单副本均匀测度 Ritz 值 λ̂ + FCI 精确基准虚线——应收敛到 ref_targets
 for k in range(K):
     axs[0].plot(steps_arr, lam_arr[:, k], lw=1.2, color=colors[k],
                 label=f"NES-VMC-{OLD_K + k}-th level")
     axs[0].axhline(ref_targets[k], lw=1.2, linestyle=':', color=colors[k],
-                   label=f"extracted-{OLD_K + k}-th level")
-axs[0].set_ylabel("Gram generalized eigenvalue (Ha)")
-axs[0].set_title(f"Scheme A' PURE matrix-free deflated NES-VMC, frozen K=4 + K={K}, H2 6-31G "
+                   label=f"FCI-{OLD_K + k}-th level")
+axs[0].set_ylabel("Ritz λ (uniform measure, Ha)")
+axs[0].set_title(f"Scheme A' PURE matrix-free deflated NES-VMC, frozen K={OLD_K} + K={K}, H2 6-31G "
                  f"({N_ITER} steps, {elapsed:.0f}s, no full-space ops)")
 axs[0].xaxis.set_major_formatter('{x:.0f}')
 axs[0].legend(fontsize=8)
@@ -568,7 +594,7 @@ axs[3].set_xlabel("step")
 axs[3].legend(fontsize=8)
 axs[3].xaxis.set_major_formatter('{x:.0f}')
 
-# 子图 5：监控量收敛误差 |λ̂_k(step) − λ_mc,k|（log 轴，同能级复用配色）
+# 子图 5：误差 |λ̂_k(step) − E_FCI,k|（log 轴，同能级复用配色）
 for k in range(K):
     error_k = np.abs(lam_arr[:, k] - ref_targets[k])
     mk = np.isfinite(error_k) & (error_k > 0)     # 跳过步 NaN / 恰好命中点掩掉，防 log 轴断线
@@ -576,14 +602,22 @@ for k in range(K):
                     label=f"NES-VMC-{OLD_K + k}-th level error")
 axs[4].axhspan(0, 0.0016, facecolor="lightblue", alpha=0.3, zorder=0,
                label="chemical accuracy (1.6 mHa)")
-axs[4].set_ylabel("Error = |lambda_hat - lambda_extracted| (Ha)")
+axs[4].set_ylabel("Error = E - EFCI (Ha)")
 axs[4].set_xlabel("step")
 axs[4].set_yscale("log")
 axs[4].xaxis.set_major_formatter('{x:.0f}')
 axs[4].legend(fontsize=8)
 
 fig.tight_layout()
-out_png = os.path.join(this_file_dir, "graph", f"训练曲线_K{K}冻结4_MatrixFree_Pure_{time_str}.png")
-os.makedirs(os.path.dirname(out_png), exist_ok=True)   # graph/ 目录本副本首次运行需创建
+os.makedirs(os.path.join(this_file_dir, "graph"), exist_ok=True)   # graph/ 目录本副本首次运行需创建
+out_png = os.path.join(this_file_dir, "graph", f"训练曲线_K{K}冻结{OLD_K}_MatrixFree_Pure_{time_str}.png")
 fig.savefig(out_png, dpi=150)
-logger.info(f"已保存图: {out_png}")
+logger.info(f"已保存图（监控量：单副本均匀测度 Ritz 值，截断伪逆）: {out_png}")
+
+
+# 末步误差 vs FCI（仅日志参考，不参与算法）
+err_end = np.abs(np.asarray(lam_arr[-1], dtype=float) - ref_targets) * 1000.0
+logger.info(f"末步 |λ̂ − E_FCI| (mHa) = {np.round(err_end, 4)} | "
+            f"化学精度阈值 1.6 mHa → {('全部达标' if np.all(np.isfinite(err_end)) and np.all(err_end < 1.6) else ('无有效监控值（整步被屏蔽）' if not np.any(np.isfinite(err_end)) else '未达标: ' + str(np.where(np.isfinite(err_end) & (err_end >= 1.6))[0].tolist())))}")
+logger.info(f"（参考）收尾提取 λ_extract = {np.round(np.asarray(lam_mc, dtype=float), 8)} | "
+            f"其与 FCI 偏差 (mHa) = {np.round(np.abs(np.asarray(lam_mc, dtype=float) - ref_targets) * 1000.0, 4)}")
