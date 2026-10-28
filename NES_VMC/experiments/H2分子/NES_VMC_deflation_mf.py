@@ -52,7 +52,8 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
     ha           : netket 稀疏哈密顿量（get_conn_padded 路径，禁止 to_dense）
     frozen_sms   : list[r] gauge-fixed 旧网络 machine（常量参数）
     frozen_params: list[r] 对应参数（不参与梯度）
-    v_rot        : (r, r) 列约定 φ_i = Σ_j ψ_j^old·v_rot[j,i]
+    v_rot        : (J, R) 列约定 φ_i = Σ_j ψ_j^old·v_rot[j,i]；J=旧网络数，R=保留的冻结列数
+                   （R=J 为常规用法；R<J 表示只冻结其中 R 条物理列，见 R 变量）
     sms          : list[K] gauge-fixed active 单列 machine（可训练）
     eps          : q 中 active 混合项系数（P1 参考分布）
     gram_ridge   : Ĝ 对角正则
@@ -65,13 +66,16 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
           （estimate_grams 的 aux 里含唯一监控量 "lam_uniform"：单副本均匀测度
             Ritz 值，用截断伪逆求解；另有 "pinv_n_keep"/"pinv_cond" 供健康诊断）
     """
-    r = len(frozen_sms)
+    r = len(frozen_sms)          # 旧网络个数 J：逐点求值需要全部 J 列
     K = len(sms)
     V = jnp.asarray(v_rot, dtype=jnp.complex128)
+    # 冻结列数 R：允许从 J 个旧网络里只保留 R≤J 条物理列（v_rot 取列子集）。
+    # 常规用法 V 是 (J,J) ⇒ R=J，行为与原版完全一致。
+    R = V.shape[1]
 
     # ---------------- 逐点列求值 ----------------
     def _cols(p, sigma, f, g):
-        """sigma (n, n_spin) -> Phi_tilde (n,r), Psi_tilde (n,K)。"""
+        """sigma (n, n_spin) -> Phi_tilde (n,R), Psi_tilde (n,K)。"""
         Lf = jnp.stack([frozen_sms[j](frozen_params[j], sigma) for j in range(r)], axis=-1)
         La = jnp.stack([sms[m](p["single_ansatz_list"][m], sigma) for m in range(K)], axis=-1)
         Phi = (jnp.exp(Lf) @ V) * jnp.exp(-f)
@@ -138,7 +142,7 @@ def make_mf_bundle(ha, frozen_sms, frozen_params, v_rot, sms,
         q = jnp.sum(jnp.abs(Phi) ** 2, axis=-1) + eps * jnp.sum(jnp.abs(Psi) ** 2, axis=-1)
         wi = 1.0 / (q * M)
         cPhi = jnp.conj(Phi)
-        Gm = cPhi.T @ (wi[:, None] * Phi) + gram_ridge * jnp.eye(r, dtype=jnp.complex128)
+        Gm = cPhi.T @ (wi[:, None] * Phi) + gram_ridge * jnp.eye(R, dtype=jnp.complex128)
         Mm = cPhi.T @ (wi[:, None] * Psi)
         HG = cPhi.T @ (wi[:, None] * Hphi)
         M2 = cPhi.T @ (wi[:, None] * Hpsi)

@@ -54,6 +54,7 @@ print(f"target_loss = sum(E_fcis[:K]) = {target_loss:.8f}")
 
 
 Hatree_Fock = hi.all_states()[0]
+print(f'Hatree_Fock = {Hatree_Fock}')
 single_edges_full = list(itertools.combinations(range(int(SINGLE_SIZE/2)), 2))
 ext_edges = []
 for k in range(K):
@@ -63,3 +64,31 @@ for k in range(K):
 
 ext_edges = jnp.asarray(ext_edges)
 
+
+class H_ccpVD_8Qbit:
+    def __init__(self, K=2):
+        self.K = K
+        self.hi = hi
+        self.hi_ext = hi ** K  # 扩展希尔伯特空间
+        self.SINGLE_SIZE = SINGLE_SIZE
+        self.ha = nkx.operator.from_pyscf_molecule(mol)
+        self.Hatree_Fock = hi.all_states()[0]
+        self.single_edges = single_edges
+        self.g = g
+        self.single_rule = single_rule
+        self.tensor_rule = nk.sampler.rules.TensorRule(self.hi_ext, [self.single_rule] * self.K)
+        self.ext_edges = []
+        self.E_fcis, self.fcivec = cisolver.kernel()
+        self.hf_ground_energy = hf_ground_energy
+        
+        self._set_ext_edges()
+        
+    def _set_ext_edges(self):
+        ext_edges=[]
+        for k in range(self.K):
+            offset = k * SINGLE_SIZE
+            for i, j in self.single_edges:
+                ext_edges.append((i + offset, j + offset))
+        self.ext_edges = jnp.asarray(ext_edges)
+        
+        

@@ -468,6 +468,57 @@ class NESTotalAnsatz_gauge_stable_frozen(nnx.Module):
         else:
             raise ValueError(f"不支持输入维度 x.shape={x.shape}")
     
+       
+        
+def get_ccsd_excitations_and_sampler_edges_from_hf(hf_state):
+    """
+    返回：
+    1. sampler_edges: 给 NetKet Graph 用，格式为 [(i, a), ...]
+    2. singles:       物理 single excitation，格式为 [((i, a),), ...]
+    3. doubles:       物理 double excitation，格式为 [((i,a), (j,b)), ...]
+    """
+    hf_state = np.asarray(hf_state)
+    n_spin_orbitals = hf_state.size
+    assert n_spin_orbitals % 2 == 0
+
+    nmo = n_spin_orbitals // 2
+
+    sampler_edges = []
+
+    # alpha block: 0 ~ nmo-1
+    alpha_sites = np.arange(0, nmo)
+    alpha_occ = alpha_sites[hf_state[alpha_sites] == 1]
+    alpha_vir = alpha_sites[hf_state[alpha_sites] == 0]
+
+    for i in alpha_occ:
+        for a in alpha_vir:
+            sampler_edges.append((int(i), int(a)))
+
+    # beta block: nmo ~ 2*nmo-1
+    beta_sites = np.arange(nmo, 2 * nmo)
+    beta_occ = beta_sites[hf_state[beta_sites] == 1]
+    beta_vir = beta_sites[hf_state[beta_sites] == 0]
+
+    for i in beta_occ:
+        for a in beta_vir:
+            sampler_edges.append((int(i), int(a)))
+
+    # 物理意义上的 single excitation
+    singles = [(edge,) for edge in sampler_edges]
+
+    # 物理意义上的 double excitation
+    doubles = []
+    for move1, move2 in combinations(sampler_edges, 2):
+        i, a = move1
+        j, b = move2
+
+        # 不能动同一个电子，也不能占到同一个虚轨道
+        if i != j and a != b:
+            doubles.append((move1, move2))
+
+    return sampler_edges, singles, doubles
+
+
 # 原版
 def create_machine(model: NESTotalAnsatz):
     """将 Flax NNX 模型包装为 NetKet 风格的 machine 函数"""
